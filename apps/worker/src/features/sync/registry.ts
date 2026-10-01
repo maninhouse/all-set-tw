@@ -53,6 +53,7 @@ import {
   prepareNextbankCaptchaSession,
 } from "../../sources/nextbank/sync";
 import { syncBinance } from "../../sources/binance/sync";
+import { syncBitfinex } from "../../sources/bitfinex/sync";
 import { SYNC_SCOPE_ALL, type SyncOutcome, type SyncScope } from "./types";
 
 type ConnectorRuntimeDefinition = {
@@ -143,6 +144,9 @@ export const connectorRuntimeRegistry: Record<
   },
   binance: {
     run: (env, trigger) => syncBinance(env, trigger),
+  },
+  bitfinex: {
+    run: (env, trigger) => syncBitfinex(env, trigger),
   },
 };
 

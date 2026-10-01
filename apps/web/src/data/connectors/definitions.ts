@@ -98,4 +98,8 @@ export const connectorFields = {
     { key: "apiKey", label: "API Key（僅需唯讀權限）", type: "text" },
     { key: "apiSecret", label: "API Secret", type: "password" },
   ],
+  bitfinex: [
+    { key: "apiKey", label: "API Key（僅需唯讀權限）", type: "text" },
+    { key: "apiSecret", label: "API Secret", type: "password" },
+  ],
 } satisfies ConnectorFieldMap;

@@ -283,7 +283,7 @@ function registerSyncRoutes(api: Hono<AppBindings>) {
     );
   });
 
-  const credentialOnlyConnectorIds = ["binance"] as const;
+  const credentialOnlyConnectorIds = ["binance", "bitfinex"] as const;
   for (const connectorId of credentialOnlyConnectorIds) {
     api.post(`/connectors/${connectorId}/sync`, async (c) => {
       return syncRouteResponse(

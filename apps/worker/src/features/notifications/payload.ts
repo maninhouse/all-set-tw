@@ -33,6 +33,7 @@ const connectorLabels: Record<ConnectorId, string> = {
   megabank: "兆豐銀行",
   rakuten: "樂天國際銀行",
   binance: "Binance",
+  bitfinex: "Bitfinex",
 };
 
 export function syncNotificationPayload(

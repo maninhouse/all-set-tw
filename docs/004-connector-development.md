@@ -451,13 +451,13 @@ Migration `0043_merge_legacy_invoice_duplicates.sql` 以相同發票號碼整併
 - 總覽 `creditCardBillInfoList` 依 `ACCT_TYPE` 與 `CURR_CODE` 區分；`ACCT_MON=999912` 是未出帳，其餘僅取各組最新一期計算目前應繳，不累加歷史帳單。消費的 `acctMon=999912` 表示未入帳。
 - 帳戶與卡號只用於請求和雜湊識別；持久化的 `raw` 只保留末四碼。任何關鍵回應無法解析時整次同步失敗，避免部分更新。
 
-### Binance
+### Binance 與 Bitfinex
 
-- 為 `api_credentials`，只用唯讀 API Key／Secret（`encrypted_config`），不產生 session，也沒有 cursor 或 challenge；實作在 `apps/worker/src/sources/binance/`；共用邏輯在 `sources/crypto/exchange.ts`（HMAC 簽章、錯誤分類、市值換算），並由 `sources/crypto/sync.ts` 的 `syncCryptoSource` 寫入。
-- 只同步持倉，寫入 `investment_positions`（`asset_type = 'crypto'`），`sourceId` 為 `binance:<wallet>:<asset>`，`asOfDate` 為同步當日（UTC）。`currency` 固定 `USD`，前端以既有匯率轉 TWD；`market_value` 為四捨五入的整數美元，沒有報價的幣種留空而不猜測。USDT、USDC 等穩定幣視為 1 USD。
-- 範圍：現貨（`/api/v3/account`）、資金（`get-funding-asset`）、Simple Earn 活期與定期。
-- 現貨帳戶會列出 Simple Earn 活期的憑證代幣（`LDBNB` 等），與活期理財是同一筆錢；只有去掉 `LD` 前綴後能對上活期理財持倉時才略過，`LDO` 這類真實幣種保留。
-- API 回報金鑰、簽章或權限無效（401／403、`-2014`／`-2015`／`-1022`）時轉為 `NeedsUserActionError`；其他錯誤維持一般失敗，排程下一輪重試。Binance 在部分地區會回 451，屬於 Worker 出口地區限制。
+- 兩者皆為 `api_credentials`，只用唯讀 API Key／Secret（`encrypted_config`），不產生 session，也沒有 cursor 或 challenge；實作在 `apps/worker/src/sources/<connector>/`；共用邏輯在 `sources/crypto/exchange.ts`（HMAC 簽章、錯誤分類、市值換算），並由 `sources/crypto/sync.ts` 的 `syncCryptoSource` 寫入。
+- 只同步持倉，寫入 `investment_positions`（`asset_type = 'crypto'`），`sourceId` 為 `<connector>:<wallet>:<asset>`，`asOfDate` 為同步當日（UTC）。`currency` 固定 `USD`，前端以既有匯率轉 TWD；`market_value` 為四捨五入的整數美元，沒有報價的幣種留空而不猜測。USDT、USDC 等穩定幣視為 1 USD。
+- Binance 範圍：現貨（`/api/v3/account`）、資金（`get-funding-asset`）、Simple Earn 活期與定期。Bitfinex 範圍：`exchange` 與 `funding` 錢包；`margin` 錢包含未實現損益，不納入。Bitfinex 代號 `UST` 等會對應為 `USDT` 等一般代號。
+- Binance 現貨帳戶會列出 Simple Earn 活期的憑證代幣（`LDBNB` 等），與活期理財是同一筆錢；只有去掉 `LD` 前綴後能對上活期理財持倉時才略過，`LDO` 這類真實幣種保留。
+- API 回報金鑰、簽章或權限無效（401／403、Binance `-2014`／`-2015`／`-1022`、Bitfinex `10100`）時轉為 `NeedsUserActionError`；其他錯誤維持一般失敗，排程下一輪重試。Binance 在部分地區會回 451，屬於 Worker 出口地區限制。
 - Worker 出口 IP 不固定，請勿在交易所啟用 IP 白名單；金鑰只開啟讀取權限，不開啟交易與提現。
 - 當日持倉全數賣出時不會寫入新的零持倉列，最新快照仍停在上一個有持倉的日期。
 

@@ -402,6 +402,18 @@ export const connectorCatalog = {
     secretStateFields: [],
     resetOnCredentialChangeFields: [],
   },
+  bitfinex: {
+    id: "bitfinex",
+    title: "Bitfinex",
+    description: "交易與資金（放貸）錢包的加密資產持倉（唯讀 API）",
+    connectionMode: "api_credentials",
+    scopes: ["all"],
+    capabilities: ["investment_position"],
+    publicFields: [],
+    credentialFields: ["apiKey", "apiSecret"],
+    secretStateFields: [],
+    resetOnCredentialChangeFields: [],
+  },
 } as const satisfies Record<string, ConnectorCatalogEntry>;
 
 export type ConnectorId = keyof typeof connectorCatalog;
