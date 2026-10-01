@@ -4,6 +4,8 @@
     InvestmentRow,
     InvestmentTransactionRow,
   } from "@/data/investments/types";
+  import Checkbox from "@/shared/ui/Checkbox.svelte";
+  import { isSmallCryptoPosition } from "../model/small-positions";
   import {
     formatCurrency,
     formatDate,
@@ -30,6 +32,30 @@
   } = $props();
 
   let tab = $state<"holdings" | "transactions">("holdings");
+
+  const HIDE_SMALL_KEY = "taiwan-fin-hub-hide-small-crypto";
+  let hideSmall = $state(readHideSmall());
+  const smallCount = $derived(positions.filter(isSmallCryptoPosition).length);
+  const visiblePositions = $derived(
+    hideSmall ? positions.filter((p) => !isSmallCryptoPosition(p)) : positions,
+  );
+
+  function readHideSmall() {
+    try {
+      return localStorage.getItem(HIDE_SMALL_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  }
+
+  function setHideSmall(value: boolean) {
+    hideSmall = value;
+    try {
+      localStorage.setItem(HIDE_SMALL_KEY, value ? "1" : "0");
+    } catch {
+      // Preference is a convenience only.
+    }
+  }
 
   function tradeDisplay(trade: InvestmentTransactionRow) {
     if (trade.amount != null && trade.price != null && trade.price !== 1)
@@ -85,11 +111,26 @@
 
   <div class={compact ? "" : "min-h-0 flex-1 overflow-y-auto px-5 pb-4"}>
     {#if tab === "holdings"}
-      {#if positions.length === 0}
-        <p class="py-8 text-center text-sm text-subtle">尚無投資持倉。</p>
+      {#if smallCount > 0}
+        <label
+          class="flex items-center gap-2 py-3 text-caption text-subtle"
+          data-testid="hide-small-crypto"
+        >
+          <Checkbox
+            checked={hideSmall}
+            onchange={(event: Event) =>
+              setHideSmall((event.currentTarget as HTMLInputElement).checked)}
+          />
+          隱藏小於 1 USD 的加密資產（{smallCount} 筆）
+        </label>
+      {/if}
+      {#if visiblePositions.length === 0}
+        <p class="py-8 text-center text-sm text-subtle">
+          {positions.length === 0 ? "尚無投資持倉。" : "沒有符合條件的持倉。"}
+        </p>
       {:else}
         <div class="divide-y divide-border">
-          {#each positions as position (position.id)}
+          {#each visiblePositions as position (position.id)}
             <div
               class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"
             >
