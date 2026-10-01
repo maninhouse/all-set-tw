@@ -102,3 +102,36 @@ export const investmentTransactions = sqliteTable(
     ),
   ],
 );
+
+export const manualInvestmentPositions = sqliteTable(
+  "manual_investment_positions",
+  {
+    id: text("id").notNull(),
+    broker: text("broker").notNull(),
+    market: text("market").notNull(),
+    symbol: text("symbol").notNull(),
+    name: text("name").notNull(),
+    assetType: text("asset_type").notNull(),
+    quantity: real("quantity").notNull(),
+    currency: text("currency").notNull(),
+    manualPrice: real("manual_price"),
+    manualPriceDate: text("manual_price_date"),
+    quotePrice: real("quote_price"),
+    quoteAt: text("quote_at"),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.id] }),
+    unique().on(table.broker, table.market, table.symbol),
+    check(
+      "manual_investment_positions_check_1",
+      sql`market IN ('US', 'JP', 'UK')`,
+    ),
+    check(
+      "manual_investment_positions_check_2",
+      sql`asset_type IN ('stock', 'etf')`,
+    ),
+  ],
+);

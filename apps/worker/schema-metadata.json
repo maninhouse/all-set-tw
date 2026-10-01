@@ -521,6 +521,27 @@
         "activity_id": "來源種類及活動 ID，作為執行內的去重鍵。",
         "snapshot": "供 API 回傳的日期、名稱、原幣金額、變動種類、發票關係與同步時間 JSON 快照。"
       }
+    },
+    "manual_investment_positions": {
+      "description": "使用者手動登錄的海外證券持倉，用於尚未有連接器的券商（例如複委託）。",
+      "notes": "市值於讀取時以 quantity × (manual_price ?? quote_price) 計算；broker 對應未來的 connector_id，當該連接器最新持倉有相同 symbol 時，此筆會被視為已由同步資料取代而不計入總額。",
+      "columns": {
+        "id": "手動持倉的系統識別碼。",
+        "broker": "券商識別碼，對應未來同步此持倉的 connector_id，例如 fubon。",
+        "market": "交易市場，目前限制為 US、JP 或 UK（倫敦交易所，美元計價）。",
+        "symbol": "大寫且不含市場後綴的證券代號。",
+        "name": "前端顯示的標的名稱。",
+        "asset_type": "資產類型，限制為 stock 或 etf。",
+        "quantity": "持有股數。",
+        "currency": "報價與市值使用的幣別，由 market 決定。",
+        "manual_price": "使用者手動填寫的價格；有值時優先於自動報價。",
+        "manual_price_date": "手動價格所代表的日期。",
+        "quote_price": "最近一次取得的自動報價。",
+        "quote_at": "最近一次成功取得自動報價的時間。",
+        "note": "使用者補充的備註。",
+        "created_at": "手動持倉建立的時間。",
+        "updated_at": "手動持倉最後更新的時間。"
+      }
     }
   }
 }

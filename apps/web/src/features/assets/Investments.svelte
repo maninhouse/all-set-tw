@@ -11,6 +11,7 @@
     investmentTransactionsQuery,
   } from "@/data/investments/queries";
   import type { InvestmentTransactionRow } from "@/data/investments/types";
+  import ManualInvestments from "./components/ManualInvestments.svelte";
   import {
     formatCurrency,
     formatDate,
@@ -127,6 +128,10 @@
                 <tr>
                   <td class="py-3 pr-4 font-semibold">
                     {p.symbol ? `${p.symbol} ` : ""}{p.name}
+                    {#if p.source === "manual"}<span
+                        class="ml-1 text-caption font-normal text-subtle"
+                        >手動</span
+                      >{/if}
                   </td>
                   <td class="px-4 py-3">{p.assetType.toUpperCase()}</td>
                   <td class="px-4 py-3">
@@ -154,7 +159,10 @@
                   {p.symbol ? `${p.symbol} ` : ""}{p.name}
                 </p>
                 <p class="mt-1 text-caption text-subtle">
-                  {p.quantity ?? 0} 單位 · {p.assetType.toUpperCase()}
+                  {p.quantity ?? 0} 單位 · {p.assetType.toUpperCase()}{p.source ===
+                  "manual"
+                    ? " · 手動"
+                    : ""}
                 </p>
               </div>
               <p class="shrink-0 font-medium tabular-nums text-steel">
@@ -168,6 +176,8 @@
         </div>
       {/if}
     </section>
+
+    <ManualInvestments {api} />
 
     <section class="min-w-0 border-t border-ink/10 pt-5" aria-label="交易紀錄">
       <div class="flex flex-wrap items-center justify-between gap-3 pb-4">

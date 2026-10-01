@@ -63,6 +63,47 @@ export interface InvestmentPosition {
   raw?: unknown;
 }
 
+/** Brokers without a connector yet; keys must match the future connector id. */
+export const MANUAL_INVESTMENT_BROKERS = {
+  fubon: "富邦證券",
+  other: "其他",
+} as const;
+
+export type ManualInvestmentBroker = keyof typeof MANUAL_INVESTMENT_BROKERS;
+
+export const MANUAL_INVESTMENT_MARKETS = {
+  US: { label: "美股", currency: "USD" },
+  JP: { label: "日股", currency: "JPY" },
+  // LSE listings quoted in USD (e.g. VWRA); GBP/GBp-quoted lines are rejected.
+  UK: { label: "英股（倫敦）", currency: "USD" },
+} as const;
+
+export type ManualInvestmentMarket = keyof typeof MANUAL_INVESTMENT_MARKETS;
+
+export interface ManualInvestmentPosition {
+  id: string;
+  broker: ManualInvestmentBroker;
+  market: ManualInvestmentMarket;
+  symbol: string;
+  name: string;
+  assetType: "stock" | "etf";
+  quantity: number;
+  currency: string;
+  manualPrice: number | null;
+  manualPriceDate: string | null;
+  quotePrice: number | null;
+  quoteAt: string | null;
+  note: string | null;
+  updatedAt: string;
+  price: number | null;
+  priceSource: "manual" | "quote" | "none";
+  marketValue: number | null;
+  /** True when the latest quote refresh failed or is older than the stale window. */
+  quoteStale: boolean;
+  /** Set when a connector already syncs this holding; it must not be counted again. */
+  supersededBy: { connectorId: string; asOfDate: string } | null;
+}
+
 export interface InvestmentTransaction {
   id: string;
   connectorId: string;

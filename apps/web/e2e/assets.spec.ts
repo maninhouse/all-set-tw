@@ -151,6 +151,7 @@ test.beforeEach(async ({ page }) => {
           asOfDate: "2026-08-08",
         },
       ];
+    else if (path === "/api/manual-investments") body = [];
     else if (path === "/api/investment-transactions")
       body = [
         {
@@ -269,4 +270,63 @@ test("資產清冊區分待繳與未知金額，並可新增手動資產", async
   await editor.getByRole("button", { name: "儲存", exact: true }).click();
   await expect(ledger.getByText("緊急預備金", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/#\/assets$/);
+});
+
+test("adds a manual overseas holding from the asset ledger", async ({
+  page,
+}) => {
+  const holdings: unknown[] = [];
+  let created: Record<string, unknown> | undefined;
+  // Registered after beforeEach, so it takes precedence for this endpoint.
+  await page.route("**/api/manual-investments", async (route) => {
+    if (route.request().method() === "POST") {
+      created = route.request().postDataJSON();
+      holdings.push({
+        id: "manual-inv:1",
+        ...created,
+        symbol: "AAPL",
+        currency: "USD",
+        manualPrice: null,
+        manualPriceDate: null,
+        quotePrice: 200,
+        quoteAt: "2026-08-08T06:00:00.000Z",
+        note: null,
+        updatedAt: "2026-08-08T06:00:00.000Z",
+        price: 200,
+        priceSource: "quote",
+        marketValue: 2_000,
+        quoteStale: false,
+        supersededBy: null,
+      });
+      await route.fulfill({ json: { id: "manual-inv:1" } });
+      return;
+    }
+    await route.fulfill({ json: holdings });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/#/assets");
+
+  const ledger = page
+    .locator('section[aria-label="資產清冊"]')
+    .filter({ visible: true });
+  await ledger.getByRole("button", { name: /^投資/ }).click();
+  await ledger.getByRole("button", { name: "新增持倉", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "新增持倉" });
+  await expect(editor).toBeVisible();
+  await editor.getByLabel("代號").fill("aapl");
+  await editor.getByLabel("名稱").fill("Apple");
+  await editor.getByLabel("股數").fill("10");
+  await editor.getByRole("button", { name: "儲存", exact: true }).click();
+
+  await expect(editor).toBeHidden();
+  expect(created).toMatchObject({
+    broker: "fubon",
+    market: "US",
+    symbol: "aapl",
+    quantity: 10,
+    manualPrice: null,
+  });
+  await expect(
+    ledger.getByRole("button", { name: "編輯 AAPL", exact: true }),
+  ).toBeVisible();
 });

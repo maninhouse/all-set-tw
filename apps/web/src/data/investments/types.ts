@@ -1,4 +1,9 @@
-import type { ConnectorId } from "@taiwan-fin-hub/shared";
+import type {
+  ConnectorId,
+  ManualInvestmentPosition,
+} from "@taiwan-fin-hub/shared";
+
+export type ManualInvestmentRow = ManualInvestmentPosition;
 
 export interface InvestmentRow {
   id: string;
@@ -10,6 +15,9 @@ export interface InvestmentRow {
   cashBalance?: number;
   currency: string;
   asOfDate: string;
+  /** Present only for holdings entered by hand instead of synced. */
+  source?: "manual";
+  quoteStale?: boolean;
 }
 
 export interface InvestmentTransactionRow {

@@ -155,6 +155,7 @@ session 忙碌，原有專屬 API 錯誤碼仍供這些情境使用。session �
 3. 需要 binding 時，在同一來源目錄建立 `connector.ts` adapter。
 4. 在同一來源目錄的 `sync.ts` 實作單次同步與 challenge use case，使用 `features/sync` 的共用 record mapping 與 staged persistence；需分段續跑的來源則沿用 durable sync 與 `run-repository.ts` 模式。來源專用的配對、存款生命週期與舊資料修復放在相鄰檔案。
    若來源提供直接存款帳戶，確認 `DIRECT_DEPOSIT_CONNECTOR_IDS` 是否需加入，以連結集保交割帳戶。
+   若來源是 `MANUAL_INVESTMENT_BROKERS` 已列出的券商（例如 `fubon`），connector ID 必須等於該 key，持倉 `symbol` 須為不含市場後綴的代號（大小寫不拘），使用者先前的手動持倉才會被自動取代、不重複計算。
 5. 在 Worker runtime registry 註冊 sync／challenge handler。
 6. 在前端新增受 `ConnectorFormFieldKey` 約束的表單欄位與必要 challenge UI。
 7. 新增 sync job migration。

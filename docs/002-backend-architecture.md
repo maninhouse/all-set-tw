@@ -33,6 +33,7 @@ apps/
     │   │   ├── investments/
     │   │   ├── invoices/
     │   │   ├── manual-assets/
+    │   │   ├── manual-investments/
     │   │   ├── net-worth/
     │   │   ├── notifications/
     │   │   ├── ocr/
@@ -768,6 +769,14 @@ Connector 不得直接寫入金融資料表。
   不存在的報告回傳 404。報告 30 天清理會級聯清除明細。
 
 新增資料筆數保留現有定義；此版不追蹤任意欄位修改歷史，也不新增活動頁同步排序。
+
+## 手動海外持倉
+
+`manual-investments` 讓使用者手動登錄尚無 connector 的海外持倉（例如富邦複委託），每檔一筆存於 `manual_investment_positions`，以 `(broker, market, symbol)` 唯一。
+
+- 市值於讀取時計算：`quantity × (manual_price ?? quote_price)`，不寫入 `investment_positions` 或 `net_worth_history`；淨值走勢圖不含手動持倉。
+- 自動報價由 `quote.ts` 呼叫 Yahoo Finance chart API，回應幣別必須等於市場幣別（US→USD、JP→JPY、UK→USD）；JP 代號加 `.T`、UK（倫敦交易所）加 `.L`，UK 僅支援美元計價標的（如 VWRA），英鎊計價者會因幣別不符被拒絕。`GET /manual-investments` 只更新超過 30 分鐘的報價，失敗時保留舊值並回傳 `quoteStale`；Demo 模式只顯示不寫入。`POST /manual-investments/quotes/refresh` 強制更新。
+- 去重：`broker` 對應未來的 `connector_id`。若該 connector 最新持倉快照（同 connector、asset type 的最新 `as_of_date`）有相同的大寫 `symbol`，該筆回傳 `supersededBy`，前端不再計入總額。去重只在 service 判斷，前端只讀這個欄位。
 
 ## 新增一般功能
 

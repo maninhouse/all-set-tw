@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import type {
     InvestmentRow,
     InvestmentTransactionRow,
@@ -16,6 +17,7 @@
     tradesPending = false,
     tradesError = false,
     compact = false,
+    children,
   }: {
     positions: InvestmentRow[];
     trades: InvestmentTransactionRow[];
@@ -23,6 +25,8 @@
     tradesPending?: boolean;
     tradesError?: boolean;
     compact?: boolean;
+    /** Rendered under the holdings list, e.g. manual holding management. */
+    children?: Snippet;
   } = $props();
 
   let tab = $state<"holdings" | "transactions">("holdings");
@@ -95,7 +99,10 @@
                 </p>
                 <p class="mt-1 text-caption text-subtle">
                   {position.assetType.toUpperCase()} · {position.currency} ·
-                  {formatNumber(position.quantity ?? 0)} 單位
+                  {formatNumber(position.quantity ?? 0)} 單位{position.source ===
+                  "manual"
+                    ? " · 手動"
+                    : ""}
                 </p>
               </div>
               <p class="text-right text-sm font-medium tabular-nums text-steel">
@@ -108,6 +115,7 @@
           {/each}
         </div>
       {/if}
+      {@render children?.()}
     {:else if tradesPending}
       <p class="py-8 text-center text-sm text-subtle">正在載入交易紀錄。</p>
     {:else if tradesError}

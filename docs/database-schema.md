@@ -8,10 +8,10 @@
 
 ## 目錄
 
-- Tables：31
+- Tables：32
 - Explicit indexes：44
 - Other objects：0
-- Migrations：49
+- Migrations：51
 
 ## Tables
 
@@ -35,6 +35,7 @@
 | [`invoice_transaction_preferences`](#invoice_transaction_preferences) | 使用者對電子發票與銀行交易是否關聯的決策。 | 5 | 2 | 2 |
 | [`invoices`](#invoices) | 電子發票的抬頭與總額主檔。 | 10 | 0 | 2 |
 | [`manual_assets`](#manual_assets) | 使用者手動登錄、無法由銀行或投資連接器同步的資產。 | 6 | 0 | 0 |
+| [`manual_investment_positions`](#manual_investment_positions) | 使用者手動登錄的海外證券持倉，用於尚未有連接器的券商（例如複委託）。 | 15 | 0 | 0 |
 | [`net_worth_history`](#net_worth_history) | 按日期保存的淨資產或資產類別歷史數值，用於圖表與歷史查詢。 | 6 | 0 | 2 |
 | [`notification_preferences`](#notification_preferences) | 此單一部署的同步推播偏好設定。 | 5 | 0 | 0 |
 | [`push_subscriptions`](#push_subscriptions) | 瀏覽器 Web Push 裝置訂閱資料。 | 6 | 0 | 0 |
@@ -1011,6 +1012,62 @@ CREATE TABLE "manual_assets" (
 , currency TEXT NOT NULL DEFAULT 'TWD')
 ```
 
+### `manual_investment_positions`
+
+> 用途：使用者手動登錄的海外證券持倉，用於尚未有連接器的券商（例如複委託）。
+> 注意：市值於讀取時以 quantity × (manual_price ?? quote_price) 計算；broker 對應未來的 connector_id，當該連接器最新持倉有相同 symbol 時，此筆會被視為已由同步資料取代而不計入總額。
+
+#### Columns
+
+| 順序 | 欄位 | 意義 | SQLite type | 可為 NULL | 預設值 | PK 順序 | Generated |
+| ---: | --- | --- | --- | :---: | --- | ---: | --- |
+| 1 | `id` | 手動持倉的系統識別碼。 | TEXT | NO | — | 1 | — |
+| 2 | `broker` | 券商識別碼，對應未來同步此持倉的 connector_id，例如 fubon。 | TEXT | NO | — | — | — |
+| 3 | `market` | 交易市場，目前限制為 US、JP 或 UK（倫敦交易所，美元計價）。 | TEXT | NO | — | — | — |
+| 4 | `symbol` | 大寫且不含市場後綴的證券代號。 | TEXT | NO | — | — | — |
+| 5 | `name` | 前端顯示的標的名稱。 | TEXT | NO | — | — | — |
+| 6 | `asset_type` | 資產類型，限制為 stock 或 etf。 | TEXT | NO | — | — | — |
+| 7 | `quantity` | 持有股數。 | REAL | NO | — | — | — |
+| 8 | `currency` | 報價與市值使用的幣別，由 market 決定。 | TEXT | NO | — | — | — |
+| 9 | `manual_price` | 使用者手動填寫的價格；有值時優先於自動報價。 | REAL | YES | — | — | — |
+| 10 | `manual_price_date` | 手動價格所代表的日期。 | TEXT | YES | — | — | — |
+| 11 | `quote_price` | 最近一次取得的自動報價。 | REAL | YES | — | — | — |
+| 12 | `quote_at` | 最近一次成功取得自動報價的時間。 | TEXT | YES | — | — | — |
+| 13 | `note` | 使用者補充的備註。 | TEXT | YES | — | — | — |
+| 14 | `created_at` | 手動持倉建立的時間。 | TEXT | NO | — | — | — |
+| 15 | `updated_at` | 手動持倉最後更新的時間。 | TEXT | NO | — | — | — |
+
+#### Foreign keys
+
+—
+
+#### Indexes
+
+—
+
+#### DDL
+
+```sql
+CREATE TABLE "manual_investment_positions" (
+  id TEXT NOT NULL PRIMARY KEY,
+  broker TEXT NOT NULL,
+  market TEXT NOT NULL CHECK (market IN ('US', 'JP', 'UK')),
+  symbol TEXT NOT NULL,
+  name TEXT NOT NULL,
+  asset_type TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf')),
+  quantity REAL NOT NULL,
+  currency TEXT NOT NULL,
+  manual_price REAL,
+  manual_price_date TEXT,
+  quote_price REAL,
+  quote_at TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (broker, market, symbol)
+)
+```
+
 ### `net_worth_history`
 
 > 用途：按日期保存的淨資產或資產類別歷史數值，用於圖表與歷史查詢。
@@ -1683,6 +1740,8 @@ Migration 是 schema 演進的 source of truth；若要了解某欄位的變更�
 - [`0049_megabank_sync_job.sql`](../apps/worker/migrations/0049_megabank_sync_job.sql)
 - [`0050_nextbank_sync_job.sql`](../apps/worker/migrations/0050_nextbank_sync_job.sql)
 - [`0051_rakuten_sync_job.sql`](../apps/worker/migrations/0051_rakuten_sync_job.sql)
+- [`0052_manual_investment_positions.sql`](../apps/worker/migrations/0052_manual_investment_positions.sql)
+- [`0053_manual_investment_uk_market.sql`](../apps/worker/migrations/0053_manual_investment_uk_market.sql)
 
 ## 程式碼導覽
 

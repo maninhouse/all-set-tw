@@ -27,6 +27,10 @@ apps/web/src/
 
 銀行與信用卡帳單 API 的 response 契約定義於 `shared/bank-api.ts`，前端 `data/bank/types.ts` 僅提供既有名稱的 type re-export。Worker 在銀行 route 的 JSON 回傳處以 `satisfies` 檢查相同契約；欄位保留現有回應的 `null` 與帳單數值 flag，不將 connector 正規化資料或 ORM row 當作 API response 型別。資料來源 ID 保持現有回應的 string，catalog 的 `ConnectorId` 用於已驗證的 connector 註冊與操作。
 
+## 投資持倉資料
+
+`data/investments` 的 `investmentsQuery` 會合併 `/api/investments` 與 `/api/manual-investments`；手動持倉經 `toInvestmentRows` 排除已被 connector 取代（`supersededBy`）的列，並標記 `source: "manual"`。手動持倉載入失敗時只略過手動部分、照常回傳同步持倉，錯誤由投資頁的手動持倉區塊（`manualInvestmentsQuery`）顯示。資產總覽、總覽與投資頁都使用同一份合併結果，不要在 feature 內另外加總手動持倉。`manualInvestments` query key 位於 `investments` 之下，invalidate `investments` 即會一併更新。
+
 ## Svelte 檔案
 
 - 頁面入口命名為 `*Page.svelte`，feature 專用子元件放在相鄰的 `components/`。
