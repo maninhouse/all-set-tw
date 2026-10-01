@@ -283,6 +283,18 @@ function registerSyncRoutes(api: Hono<AppBindings>) {
     );
   });
 
+  const credentialOnlyConnectorIds = ["binance"] as const;
+  for (const connectorId of credentialOnlyConnectorIds) {
+    api.post(`/connectors/${connectorId}/sync`, async (c) => {
+      return syncRouteResponse(
+        c,
+        withManualSyncLock(c.env, connectorId, SYNC_SCOPE_ALL, (syncEnv) =>
+          runConnectorSync(syncEnv, connectorId, "manual"),
+        ),
+      );
+    });
+  }
+
   api.post("/connectors/skbank/sync", async (c) => {
     return syncRouteResponse(
       c,

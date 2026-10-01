@@ -52,6 +52,7 @@ import {
   syncNextbank,
   prepareNextbankCaptchaSession,
 } from "../../sources/nextbank/sync";
+import { syncBinance } from "../../sources/binance/sync";
 import { SYNC_SCOPE_ALL, type SyncOutcome, type SyncScope } from "./types";
 
 type ConnectorRuntimeDefinition = {
@@ -139,6 +140,9 @@ export const connectorRuntimeRegistry: Record<
     run: (env, trigger, _scope, overrides) =>
       syncMegabank(env, trigger, overrides as MegabankSyncOverrides),
     prepareChallenge: prepareMegabankCaptchaSession,
+  },
+  binance: {
+    run: (env, trigger) => syncBinance(env, trigger),
   },
 };
 

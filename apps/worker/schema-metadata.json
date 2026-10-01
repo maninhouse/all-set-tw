@@ -220,7 +220,7 @@
         "id": "持倉快照的系統識別碼。",
         "connector_id": "產生此持倉的外部連接器識別碼。",
         "source_id": "外部來源系統提供的持倉識別碼。",
-        "asset_type": "資產類型，目前限制為 stock、etf 或 fund。",
+        "asset_type": "資產類型，目前限制為 stock、etf、fund 或 crypto。",
         "symbol": "證券、基金或 ETF 的代號。",
         "name": "投資標的名稱。",
         "quantity": "持有數量。",

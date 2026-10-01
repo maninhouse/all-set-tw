@@ -11,7 +11,7 @@
 - Tables：32
 - Explicit indexes：44
 - Other objects：0
-- Migrations：51
+- Migrations：53
 
 ## Tables
 
@@ -705,7 +705,7 @@ CREATE TABLE "exchange_rates" (
 | 1 | `id` | 持倉快照的系統識別碼。 | TEXT | NO | — | 1 | — |
 | 2 | `connector_id` | 產生此持倉的外部連接器識別碼。 | TEXT | NO | — | — | — |
 | 3 | `source_id` | 外部來源系統提供的持倉識別碼。 | TEXT | NO | — | — | — |
-| 4 | `asset_type` | 資產類型，目前限制為 stock、etf 或 fund。 | TEXT | NO | — | — | — |
+| 4 | `asset_type` | 資產類型，目前限制為 stock、etf、fund 或 crypto。 | TEXT | NO | — | — | — |
 | 5 | `symbol` | 證券、基金或 ETF 的代號。 | TEXT | YES | — | — | — |
 | 6 | `name` | 投資標的名稱。 | TEXT | NO | — | — | — |
 | 7 | `quantity` | 持有數量。 | REAL | YES | — | — | — |
@@ -737,7 +737,7 @@ CREATE TABLE "investment_positions" (
   id TEXT NOT NULL PRIMARY KEY,
   connector_id TEXT NOT NULL,
   source_id TEXT NOT NULL,
-  asset_type TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf', 'fund')),
+  asset_type TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf', 'fund', 'crypto')),
   symbol TEXT,
   name TEXT NOT NULL,
   quantity REAL,
@@ -1742,6 +1742,8 @@ Migration 是 schema 演進的 source of truth；若要了解某欄位的變更�
 - [`0051_rakuten_sync_job.sql`](../apps/worker/migrations/0051_rakuten_sync_job.sql)
 - [`0052_manual_investment_positions.sql`](../apps/worker/migrations/0052_manual_investment_positions.sql)
 - [`0053_manual_investment_uk_market.sql`](../apps/worker/migrations/0053_manual_investment_uk_market.sql)
+- [`0054_investment_positions_crypto.sql`](../apps/worker/migrations/0054_investment_positions_crypto.sql)
+- [`0055_binance_sync_job.sql`](../apps/worker/migrations/0055_binance_sync_job.sql)
 
 ## 程式碼導覽
 

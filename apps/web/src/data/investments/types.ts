@@ -7,7 +7,7 @@ export type ManualInvestmentRow = ManualInvestmentPosition;
 
 export interface InvestmentRow {
   id: string;
-  assetType: "stock" | "etf" | "fund";
+  assetType: "stock" | "etf" | "fund" | "crypto";
   symbol?: string;
   name: string;
   quantity?: number;

@@ -46,7 +46,7 @@ export interface InvoiceLineItem {
   raw?: unknown;
 }
 
-export type AssetType = "stock" | "etf" | "fund";
+export type AssetType = "stock" | "etf" | "fund" | "crypto";
 
 export interface InvestmentPosition {
   id: string;

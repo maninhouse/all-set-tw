@@ -390,6 +390,18 @@ export const connectorCatalog = {
       "deviceSeed",
     ],
   },
+  binance: {
+    id: "binance",
+    title: "Binance",
+    description: "現貨、資金與理財帳戶的加密資產持倉（唯讀 API）",
+    connectionMode: "api_credentials",
+    scopes: ["all"],
+    capabilities: ["investment_position"],
+    publicFields: [],
+    credentialFields: ["apiKey", "apiSecret"],
+    secretStateFields: [],
+    resetOnCredentialChangeFields: [],
+  },
 } as const satisfies Record<string, ConnectorCatalogEntry>;
 
 export type ConnectorId = keyof typeof connectorCatalog;
