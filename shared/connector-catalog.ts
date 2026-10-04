@@ -414,6 +414,18 @@ export const connectorCatalog = {
     secretStateFields: [],
     resetOnCredentialChangeFields: [],
   },
+  linebank: {
+    id: "linebank",
+    title: "LINE Bank",
+    description: "連線商業銀行存款帳戶、前一日餘額與交易明細",
+    connectionMode: "api_credentials",
+    scopes: ["all"],
+    capabilities: ["bank_account", "bank_balance_snapshot", "bank_transaction"],
+    publicFields: [],
+    credentialFields: ["userId", "account", "password"],
+    secretStateFields: [],
+    resetOnCredentialChangeFields: [],
+  },
 } as const satisfies Record<string, ConnectorCatalogEntry>;
 
 export type ConnectorId = keyof typeof connectorCatalog;

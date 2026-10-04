@@ -102,4 +102,9 @@ export const connectorFields = {
     { key: "apiKey", label: "API Key（僅需唯讀權限）", type: "text" },
     { key: "apiSecret", label: "API Secret", type: "password" },
   ],
+  linebank: [
+    { key: "userId", label: "身分證字號", type: "text" },
+    { key: "account", label: "使用者代號", type: "text" },
+    { key: "password", label: "網路銀行密碼", type: "password" },
+  ],
 } satisfies ConnectorFieldMap;

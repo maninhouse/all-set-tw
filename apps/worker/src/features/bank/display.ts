@@ -8,6 +8,7 @@ const OBANK_BANK_CODE = "048";
 const HNCB_BANK_CODE = "008";
 const KGIBANK_BANK_CODE = "809";
 const RAKUTEN_BANK_CODE = "826";
+const LINEBANK_BANK_CODE = "824";
 const FIRSTBANK_BANK_CODE = "007";
 const MEGABANK_BANK_CODE = "017";
 const TAIWAN_BANK_NAMES: Record<string, string> = {
@@ -105,6 +106,10 @@ export function deriveBankMatchKey(
     const last4 = sourceId.split(":")[2]?.replace(/\D/g, "").slice(-4) ?? "";
     return { bankCode: RAKUTEN_BANK_CODE, last4: last4 || null };
   }
+  if (connectorId === "linebank" && sourceId.startsWith("bank:linebank:")) {
+    const last4 = sourceId.split(":")[2]?.replace(/\D/g, "").slice(-4) ?? "";
+    return { bankCode: LINEBANK_BANK_CODE, last4: last4 || null };
+  }
   const match = sourceId.match(/^settlement:([^:]+):([^:]+)/);
   const last4 = match?.[2]?.replace(/\D/g, "").slice(-4) ?? "";
   return match
@@ -150,7 +155,9 @@ function normalizeDepositDisplay<T extends BankDisplayRow>(row: T): T {
                       ? MEGABANK_BANK_CODE
                       : row.connectorId === "rakuten"
                         ? RAKUTEN_BANK_CODE
-                        : undefined);
+                        : row.connectorId === "linebank"
+                          ? LINEBANK_BANK_CODE
+                          : undefined);
   const accountSuffix = accountSuffixFromSourceId(sourceId);
   return {
     ...row,
