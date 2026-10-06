@@ -524,6 +524,60 @@ export async function submitCathayOtp(
   }
 }
 
+const CATHAY_ANNOUNCEMENT_DISMISS = /^(下次再提醒|我知道了|關閉|確定)$/;
+
+/**
+ * The transaction page can open a Chakra announcement modal (e.g.
+ * 「系統維護公告」) whose overlay swallows clicks and traps focus, so the
+ * query selectors cannot open. Choose 「下次再提醒」 over 「不要再顯示」 so the
+ * user's own preference on the bank site is left unchanged.
+ */
+export async function dismissCathayAnnouncementModalIfPresent(
+  page: Pick<Page, "click" | "evaluate" | "waitForFunction">,
+) {
+  const title = await page.evaluate((pattern: string) => {
+    const dismiss = new RegExp(pattern);
+    const modal = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        ".chakra-modal__content, [role='dialog'], [role='alertdialog']",
+      ),
+    ).find((candidate) => candidate.getClientRects().length > 0);
+    if (!modal) return null;
+    const buttons = Array.from(
+      modal.querySelectorAll<HTMLElement>("button, a, [role='button']"),
+    ).filter((control) => control.getClientRects().length > 0);
+    const text = (control: HTMLElement) =>
+      (control.textContent ?? "").replace(/\s+/g, "");
+    const button =
+      buttons.find((control) => text(control) === "下次再提醒") ??
+      buttons.find((control) => dismiss.test(text(control))) ??
+      modal.querySelector<HTMLElement>(".chakra-modal__close-btn");
+    if (!button) return null;
+    button.dataset.cathayAnnouncementDismiss = "true";
+    return (modal.innerText ?? "").trim().split(/\n/)[0]!.slice(0, 20);
+  }, CATHAY_ANNOUNCEMENT_DISMISS.source);
+  if (title === null) return false;
+
+  console.log(
+    `[cathaybk] dismissing announcement modal "${title.replace(/\d/g, "#")}"`,
+  );
+  await page
+    .click('[data-cathay-announcement-dismiss="true"]')
+    .catch(() => null);
+  await page
+    .waitForFunction(
+      () =>
+        !Array.from(
+          document.querySelectorAll(
+            ".chakra-modal__content, [role='dialog'], [role='alertdialog']",
+          ),
+        ).some((candidate) => candidate.getClientRects().length > 0),
+      { timeout: 5000 },
+    )
+    .catch(() => null);
+  return true;
+}
+
 export async function completeCathayTrustedDeviceSetup(
   page: Pick<Page, "click" | "evaluate" | "type" | "waitForFunction">,
 ) {
@@ -1165,16 +1219,42 @@ export async function chooseCathayComboboxOption(
   }, kind);
   if (!marked) return false;
 
+  const waitForOptions = () =>
+    page
+      .waitForFunction(
+        () =>
+          document.querySelectorAll("[role='option'], [id*='-option-']")
+            .length > 0,
+        { timeout: 5000 },
+      )
+      .then(() => true)
+      .catch(() => false);
   await page.focus(`[data-cathay-combobox="${kind}"]`);
   await page.keyboard.press("ArrowDown");
-  await page
-    .waitForFunction(
-      () =>
-        document.querySelectorAll("[role='option'], [id*='-option-']").length >
-        0,
-      { timeout: 5000 },
-    )
-    .catch(() => null);
+  if (!(await waitForOptions())) {
+    // The keyboard does not always open the menu; react-select also opens on
+    // a real mouse press on its control.
+    const control = await page.evaluate((target: CathayCombobox) => {
+      const input = Array.from(
+        document.querySelectorAll<HTMLInputElement>("input[role='combobox']"),
+      ).find((candidate) => candidate.dataset.cathayCombobox === target);
+      let node: HTMLElement | null = input ?? null;
+      for (let depth = 0; depth < 6 && node; depth += 1) {
+        node = node.parentElement;
+        if (/control/i.test(String(node?.className ?? ""))) {
+          node!.dataset.cathayComboboxControl = target;
+          return true;
+        }
+      }
+      return false;
+    }, kind);
+    if (control) {
+      await page
+        .click(`[data-cathay-combobox-control="${kind}"]`)
+        .catch(() => null);
+      await waitForOptions();
+    }
+  }
   return page.evaluate(
     (match: string, exactAccount: boolean) => {
       const normalize = (value: string) => value.replace(/\s+/g, "");
@@ -1198,16 +1278,50 @@ export async function chooseCathayComboboxOption(
   );
 }
 
-async function selectTransactionPeriod(
+export async function selectTransactionPeriod(
   page: Page,
   days: number,
 ): Promise<void> {
   const label = periodLabel(days);
   if (label === "近 30 天") return; // default, no action needed
-  if (!(await chooseCathayComboboxOption(page, "period", label))) {
-    throw new Error(`Cathay Bank period option "${label}" was not found.`);
+  // The selector sometimes renders before react-select can open its menu, so
+  // close any half-open menu and try again before giving up.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    await dismissCathayAnnouncementModalIfPresent(page);
+    if (await chooseCathayComboboxOption(page, "period", label)) {
+      console.log(`[cathaybk] set period to "${label}"`);
+      return;
+    }
+    const state = await page.evaluate(() => ({
+      comboboxes: Array.from(
+        document.querySelectorAll<HTMLInputElement>("input[role='combobox']"),
+      ).map((input) => ({
+        label: (input.closest("[class*='container']")?.textContent ?? "")
+          .replace(/\d{5,}/g, "#")
+          .slice(0, 40),
+        disabled: input.disabled,
+        expanded: input.getAttribute("aria-expanded"),
+        marked: input.dataset.cathayCombobox ?? null,
+      })),
+      options: Array.from(
+        document.querySelectorAll<HTMLElement>(
+          "[role='option'], [id*='-option-']",
+        ),
+      )
+        .map((option) => (option.textContent ?? "").replace(/\d{5,}/g, "#"))
+        .slice(0, 10),
+    }));
+    console.warn(
+      JSON.stringify({
+        event: "cathaybk_period_select_failed",
+        attempt,
+        ...state,
+      }),
+    );
+    await page.keyboard.press("Escape").catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 1500));
   }
-  console.log(`[cathaybk] set period to "${label}"`);
+  throw new Error(`Cathay Bank period option "${label}" was not found.`);
 }
 
 function waitForDepositTransactions(page: Page) {
@@ -1315,7 +1429,9 @@ async function scrapeDeposits(
         .catch(() => null);
       detailPageOpen = true;
     } else if (
-      !(await chooseCathayComboboxOption(page, "account", acct.acctNo))
+      !(await dismissCathayAnnouncementModalIfPresent(page).then(() =>
+        chooseCathayComboboxOption(page, "account", acct.acctNo),
+      ))
     ) {
       assertCathayNotLoggedOut(page);
       throw new Error(
