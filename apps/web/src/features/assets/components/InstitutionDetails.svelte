@@ -13,13 +13,23 @@
     billsPending = false,
     billsError = false,
     compact = false,
+    hiddenIds = new Set(),
   }: {
     group: InstitutionAssetGroup;
     bills: CreditCardBillRow[];
     billsPending?: boolean;
     billsError?: boolean;
     compact?: boolean;
+    /** Small accounts and cards hidden by the page-level checkbox. */
+    hiddenIds?: ReadonlySet<string>;
   } = $props();
+
+  const visibleAccounts = $derived(
+    group.accounts.filter((account) => !hiddenIds.has(account.id)),
+  );
+  const visibleCards = $derived(
+    group.cards.filter((card) => !hiddenIds.has(card.id)),
+  );
 
   const cardsById = $derived(
     new Map(group.cards.map((card) => [card.id, card])),
@@ -51,6 +61,10 @@
     }
     if (dueDate) return `繳款期限 ${formatDate(dueDate)}`;
     return card.balance == null ? "繳款期限待同步" : "繳款期限尚未提供";
+  }
+
+  function hiddenLabel(count: number) {
+    return count > 0 ? `（隱藏 ${count}）` : "";
   }
 
   function paymentStatusLabel(bill: CreditCardBillRow) {
@@ -106,14 +120,18 @@
         銀行帳戶
       </h3>
       <span class="text-caption text-subtle">
-        {group.accounts.length} 個帳戶
+        {group.accounts.length} 個帳戶{hiddenLabel(
+          group.accounts.length - visibleAccounts.length,
+        )}
       </span>
     </div>
     {#if group.accounts.length === 0}
       <p class="py-3 text-sm text-subtle">此機構沒有銀行帳戶。</p>
+    {:else if visibleAccounts.length === 0}
+      <p class="py-3 text-sm text-subtle">小額帳戶已全部隱藏。</p>
     {:else}
       <div class="mt-2 divide-y divide-border">
-        {#each group.accounts as account (account.id)}
+        {#each visibleAccounts as account (account.id)}
           <div
             class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"
           >
@@ -156,14 +174,18 @@
         信用卡帳戶
       </h3>
       <span class="text-caption text-subtle">
-        {group.cards.length} 張卡片
+        {group.cards.length} 張卡片{hiddenLabel(
+          group.cards.length - visibleCards.length,
+        )}
       </span>
     </div>
     {#if group.cards.length === 0}
       <p class="py-3 text-sm text-subtle">此機構沒有信用卡。</p>
+    {:else if visibleCards.length === 0}
+      <p class="py-3 text-sm text-subtle">小額信用卡已全部隱藏。</p>
     {:else}
       <div class="mt-2 divide-y divide-border">
-        {#each group.cards as card (card.id)}
+        {#each visibleCards as card (card.id)}
           <div
             class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"
           >

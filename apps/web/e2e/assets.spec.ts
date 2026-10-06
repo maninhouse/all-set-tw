@@ -1,4 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** The institution view keeps bills, trades and manual asset workflows. */
+async function useInstitutionView(page: Page) {
+  await page.addInitScript(() =>
+    localStorage.setItem("taiwan-fin-hub-asset-ledger-view", "institution"),
+  );
+}
 
 const bankData = {
   accounts: [
@@ -206,6 +213,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("資產清冊區分待繳與未知金額，並可新增手動資產", async ({ page }) => {
+  await useInstitutionView(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/assets");
 
@@ -303,6 +311,7 @@ test("adds a manual overseas holding from the asset ledger", async ({
     }
     await route.fulfill({ json: holdings });
   });
+  await useInstitutionView(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/#/assets");
 
@@ -330,3 +339,161 @@ test("adds a manual overseas holding from the asset ledger", async ({
     ledger.getByRole("button", { name: "編輯 AAPL", exact: true }),
   ).toBeVisible();
 });
+
+for (const width of [1440, 320]) {
+  test(`groups assets by category with collapsible subtotals at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/#/assets");
+
+    const view = page.getByRole("group", { name: "清冊檢視" });
+    await expect(
+      view.getByRole("button", { name: "依類別", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const ledger = page
+      .locator('section[aria-label="資產清冊"]')
+      .filter({ visible: true });
+    const category = (label: string) =>
+      ledger.getByRole("button", { name: new RegExp(`^${label}`) });
+    await expect(category("活存")).toContainText("NT$774,880");
+    await expect(category("台股")).toContainText("NT$1,193,800");
+    await expect(category("其他資產")).toContainText("NT$1,600,000");
+    await expect(category("信用卡負債")).toContainText("−NT$12,060");
+    await expect(category("CRYPTO")).toHaveCount(0);
+
+    const tw = category("台股");
+    await expect(tw).toHaveAttribute("aria-expanded", "false");
+    await expect(ledger.getByText("0050 元大台灣50")).toBeHidden();
+    await tw.click();
+    await expect(tw).toHaveAttribute("aria-expanded", "true");
+    await expect(ledger.getByText("0050 元大台灣50")).toBeVisible();
+    await category("活存").click();
+    await expect(ledger.getByText("王道銀行 · USD")).toBeVisible();
+    await expect(ledger.getByText("US$1,000")).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBe(width);
+
+    await view.getByRole("button", { name: "依機構", exact: true }).click();
+    await expect(
+      page
+        .locator('section[aria-label="資產清冊"]')
+        .filter({ visible: true })
+        .getByRole("button", { name: /^台新銀行/ }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      view.getByRole("button", { name: "依機構", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+}
+
+for (const view of ["category", "institution"] as const) {
+  test(`hides small accounts and holdings in the ${view} view`, async ({
+    page,
+  }) => {
+    await page.route("**/api/bank", (route) =>
+      route.fulfill({
+        json: {
+          ...bankData,
+          accounts: [
+            ...bankData.accounts,
+            {
+              ...bankData.accounts[0],
+              id: "taishin-dust",
+              sourceId: "dust-812",
+              accountName: "零錢戶",
+              balance: 3,
+            },
+          ],
+        },
+      }),
+    );
+    await page.addInitScript(
+      (value) =>
+        localStorage.setItem("taiwan-fin-hub-asset-ledger-view", value),
+      view,
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/#/assets");
+
+    const hideSmall = page.getByRole("checkbox", { name: /^隱藏小額項目/ });
+    await expect(hideSmall).toBeChecked();
+    await expect(page.getByTestId("hide-small-items")).toContainText(
+      "隱藏小額項目（1 筆）",
+    );
+    const ledger = page
+      .locator('section[aria-label="資產清冊"]')
+      .filter({ visible: true });
+    if (view === "category")
+      await ledger.getByRole("button", { name: /^活存/ }).click();
+    else await ledger.getByRole("button", { name: /^台新銀行/ }).click();
+    await expect(ledger.getByText("薪轉戶", { exact: true })).toBeVisible();
+    await expect(ledger.getByText("零錢戶", { exact: true })).toBeHidden();
+
+    await hideSmall.uncheck();
+    await expect(ledger.getByText("零錢戶", { exact: true })).toBeVisible();
+  });
+}
+
+for (const width of [1280, 390, 320]) {
+  test(`shows time deposit dates separately from sync time at ${width}px`, async ({
+    page,
+  }) => {
+    await useInstitutionView(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.route("**/api/bank", (route) =>
+      route.fulfill({
+        json: {
+          accounts: [
+            {
+              ...bankData.accounts[2],
+              id: "td",
+              currency: "TWD",
+              accountType: "time_deposit",
+              accountName: "新資金9個月新台幣定存年利率2.35% · 末四碼 1900",
+              balance: 52736,
+              openedDate: "2026-09-07",
+              maturityDate: "2027-06-07",
+              asOfAt: "2026-09-08T01:00:00Z",
+            },
+            {
+              ...bankData.accounts[2],
+              id: "legacy-td",
+              accountType: "time_deposit",
+              accountName: "舊定存",
+            },
+          ],
+          transactions: [],
+        },
+      }),
+    );
+    await page.goto("/#/assets");
+    const ledger = page
+      .locator('section[aria-label="資產清冊"]')
+      .filter({ visible: true });
+    if (width < 768)
+      await ledger.getByRole("button", { name: /王道銀行/ }).click();
+    await expect(
+      page
+        .getByText("起息日 2026/9/7 · 到期日 2027/6/7")
+        .filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByText("起息日 尚未取得 · 到期日 尚未取得")
+        .filter({ visible: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/更新 2026\/9\/8/).filter({ visible: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBe(width);
+    await page.screenshot({
+      path: `/tmp/obank-assets-${width}.png`,
+      fullPage: true,
+    });
+  });
+}

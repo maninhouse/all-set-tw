@@ -9,11 +9,17 @@
   } from "@/data/investments/queries";
   import type { ApiClient } from "@/shared/api/client";
   import { formatCompactTwd, formatCurrency } from "@/shared/format/financial";
+  import Checkbox from "@/shared/ui/Checkbox.svelte";
   import EmptyState from "@/shared/ui/EmptyState.svelte";
+  import CategoryLedger from "./components/CategoryLedger.svelte";
   import InstitutionDetails from "./components/InstitutionDetails.svelte";
   import InvestmentWorkspace from "./components/InvestmentWorkspace.svelte";
   import ManualAssets from "./ManualAssets.svelte";
   import ManualInvestments from "./components/ManualInvestments.svelte";
+  import {
+    readHideSmallItems,
+    writeHideSmallItems,
+  } from "./model/small-positions";
   import { calculateAssetSummary } from "./model/summary";
   import type { InstitutionAssetGroup } from "./model/summary";
 
@@ -88,6 +94,43 @@
 
   function toggleMobile(key: string) {
     expandedKey = mobileExpandedKey === key ? null : key;
+  }
+
+  let hideSmall = $state(readHideSmallItems());
+  const hiddenIds = $derived<ReadonlySet<string>>(
+    hideSmall ? summary.smallItemIds : new Set(),
+  );
+
+  function setHideSmall(value: boolean) {
+    hideSmall = value;
+    writeHideSmallItems(value);
+  }
+
+  type LedgerView = "category" | "institution";
+  const LEDGER_VIEW_KEY = "taiwan-fin-hub-asset-ledger-view";
+  let ledgerView = $state<LedgerView>(readLedgerView());
+  // Without any data the institution view still offers adding holdings.
+  const effectiveView = $derived<LedgerView>(
+    summary.categoryGroups.length === 0 ? "institution" : ledgerView,
+  );
+
+  function readLedgerView(): LedgerView {
+    try {
+      return localStorage.getItem(LEDGER_VIEW_KEY) === "institution"
+        ? "institution"
+        : "category";
+    } catch {
+      return "category";
+    }
+  }
+
+  function setLedgerView(view: LedgerView) {
+    ledgerView = view;
+    try {
+      localStorage.setItem(LEDGER_VIEW_KEY, view);
+    } catch {
+      // View preference is a convenience only.
+    }
   }
 </script>
 
@@ -184,35 +227,206 @@
       </div>
     </section>
 
-    <section
-      class="hidden h-[620px] min-w-0 grid-cols-[minmax(320px,0.9fr)_minmax(360px,1.1fr)] border-t border-ink/10 xl:grid"
-      aria-label="資產清冊"
-    >
-      <div class="flex min-h-0 flex-col overflow-hidden border-r border-ink/10">
-        <header
-          class="flex items-center justify-between gap-3 border-b border-ink/10 px-3 py-4"
+    {#if summary.categoryGroups.length > 0}
+      <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div
+          class="flex w-fit gap-1 rounded-lg bg-ink/5 p-1"
+          role="group"
+          aria-label="清冊檢視"
         >
-          <div>
-            <h2 class="font-semibold">帳戶與資產</h2>
-            <p class="mt-1 text-caption text-subtle">
-              同一金融機構的帳戶與信用卡合併顯示
-            </p>
-          </div>
-          <span class="text-caption text-subtle">
-            {ledgerItems.length} 項
-          </span>
-        </header>
-        <div class="min-h-0 flex-1 overflow-y-auto">
-          {#if summary.institutionGroups.length > 0}
-            <p class="px-3 py-2 text-caption font-medium text-subtle">
-              金融機構
-            </p>
-            {#each summary.institutionGroups as group (group.key)}
+          {#each [{ view: "category", label: "依類別" }, { view: "institution", label: "依機構" }] as const as option (option.view)}
+            <button
+              type="button"
+              class={`min-h-9 rounded-md px-3 text-sm font-medium transition ${effectiveView === option.view ? "bg-card text-ink shadow-xs" : "text-subtle hover:text-ink"}`}
+              aria-pressed={effectiveView === option.view}
+              onclick={() => setLedgerView(option.view)}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+        {#if summary.smallItemIds.size > 0}
+          <label
+            class="flex items-center gap-2 text-caption text-subtle"
+            data-testid="hide-small-items"
+          >
+            <Checkbox
+              checked={hideSmall}
+              onchange={(event: Event) =>
+                setHideSmall((event.currentTarget as HTMLInputElement).checked)}
+            />
+            隱藏小額項目（{summary.smallItemIds.size} 筆）
+            <span class="sr-only md:not-sr-only">
+              · USD 計價 &lt; 1 USD、TWD 計價 &lt; NT$10
+            </span>
+          </label>
+        {/if}
+      </div>
+    {/if}
+
+    {#if effectiveView === "category"}
+      <CategoryLedger
+        groups={summary.categoryGroups}
+        grossAssets={summary.grossAssets}
+        {hiddenIds}
+      />
+    {:else}
+      <section
+        class="hidden h-[620px] min-w-0 grid-cols-[minmax(320px,0.9fr)_minmax(360px,1.1fr)] border-t border-ink/10 xl:grid"
+        aria-label="資產清冊"
+      >
+        <div
+          class="flex min-h-0 flex-col overflow-hidden border-r border-ink/10"
+        >
+          <header
+            class="flex items-center justify-between gap-3 border-b border-ink/10 px-3 py-4"
+          >
+            <div>
+              <h2 class="font-semibold">帳戶與資產</h2>
+              <p class="mt-1 text-caption text-subtle">
+                同一金融機構的帳戶與信用卡合併顯示
+              </p>
+            </div>
+            <span class="text-caption text-subtle">
+              {ledgerItems.length} 項
+            </span>
+          </header>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            {#if summary.institutionGroups.length > 0}
+              <p class="px-3 py-2 text-caption font-medium text-subtle">
+                金融機構
+              </p>
+              {#each summary.institutionGroups as group (group.key)}
+                <button
+                  class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === group.key ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
+                  type="button"
+                  aria-pressed={activeKey === group.key}
+                  onclick={() => (selectedKey = group.key)}
+                >
+                  <span class="min-w-0">
+                    <strong class="block truncate text-sm">
+                      {group.institution}
+                    </strong>
+                    <small class="mt-1 block truncate text-caption text-subtle">
+                      {group.accounts.length} 帳戶 · {group.cards.length} 卡片{group
+                        .foreignCurrencies.length
+                        ? ` · 含 ${group.foreignCurrencies.join("、")}`
+                        : ""}
+                    </small>
+                  </span>
+                  <span class="text-right">
+                    <strong class="block text-sm tabular-nums text-steel">
+                      {group.accounts.length
+                        ? formatCurrency(group.assetTotalTwd)
+                        : "—"}
+                    </strong>
+                    <small
+                      class={`mt-1 block text-caption tabular-nums ${group.cards.length ? "text-coral" : "text-subtle"}`}
+                    >
+                      {group.cards.length
+                        ? group.hasUnknownCardBalance
+                          ? "負債資料不完整"
+                          : `${group.debtTotalTwd < 0 ? "溢繳" : "負債"} ${formatCurrency(-group.debtTotalTwd)}`
+                        : "無信用卡"}
+                    </small>
+                  </span>
+                </button>
+              {/each}
+            {/if}
+
+            <button
+              class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "investments" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
+              type="button"
+              aria-pressed={activeKey === "investments"}
+              onclick={() => (selectedKey = "investments")}
+            >
+              <span class="min-w-0">
+                <strong class="block text-sm">投資</strong>
+                <small class="mt-1 block text-caption text-subtle">
+                  {$investments.data?.length ?? 0} 個持倉 · 持倉與交易紀錄
+                </small>
+              </span>
+              <strong class="text-sm tabular-nums text-steel">
+                {formatCurrency(summary.investmentTotal)}
+              </strong>
+            </button>
+
+            {#if ($manual.data?.length ?? 0) > 0}
               <button
-                class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === group.key ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
+                class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "manual-assets" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
                 type="button"
-                aria-pressed={activeKey === group.key}
-                onclick={() => (selectedKey = group.key)}
+                aria-pressed={activeKey === "manual-assets"}
+                onclick={() => (selectedKey = "manual-assets")}
+              >
+                <span class="min-w-0">
+                  <strong class="block text-sm">其他資產</strong>
+                  <small class="mt-1 block text-caption text-subtle">
+                    {$manual.data?.length ?? 0} 筆 · 手動維護估值
+                  </small>
+                </span>
+                <strong class="text-sm tabular-nums text-moss">
+                  {formatCurrency(summary.manualTotal)}
+                </strong>
+              </button>
+            {/if}
+          </div>
+        </div>
+
+        <div class="min-h-0 overflow-y-auto">
+          {#if activeItem?.kind === "institution"}
+            <InstitutionDetails
+              {hiddenIds}
+              group={activeItem.group}
+              bills={$bills.data ?? []}
+              billsPending={$bills.isPending}
+              billsError={$bills.isError}
+            />
+          {:else if activeItem?.kind === "investments"}
+            <InvestmentWorkspace
+              {hiddenIds}
+              positions={$investments.data ?? []}
+              trades={$trades.data ?? []}
+              total={summary.investmentTotal}
+              tradesPending={$trades.isPending}
+              tradesError={$trades.isError}
+            >
+              <ManualInvestments {api} />
+            </InvestmentWorkspace>
+          {:else if activeItem?.kind === "manual-assets"}
+            <ManualAssets {api} variant="embedded" />
+          {/if}
+        </div>
+      </section>
+
+      <section
+        class="grid border-t border-ink/10 pt-5 xl:hidden"
+        aria-label="資產清冊"
+      >
+        {#if summary.institutionGroups.length > 0}
+          <div class="flex items-start justify-between gap-3 pb-1">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">金融機構</h2>
+              <p class="mt-1 text-caption text-subtle">
+                {summary.institutionGroups.length} 個機構
+              </p>
+            </div>
+            <strong
+              class="text-lg font-medium tracking-tight tabular-nums text-steel"
+            >
+              {formatCurrency(summary.bankTotal)}
+            </strong>
+          </div>
+          {#each summary.institutionGroups as group (group.key)}
+            <div
+              class={mobileExpandedKey === group.key
+                ? "border-b border-ink/15 last:border-b-0"
+                : "border-b border-ink/8 last:border-b-0"}
+            >
+              <button
+                class="grid min-h-[72px] w-full grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-3 py-2 text-left"
+                type="button"
+                aria-expanded={mobileExpandedKey === group.key}
+                onclick={() => toggleMobile(group.key)}
               >
                 <span class="min-w-0">
                   <strong class="block truncate text-sm">
@@ -241,204 +455,84 @@
                       : "無信用卡"}
                   </small>
                 </span>
+                <ChevronRight
+                  class={`size-4 text-subtle transition ${mobileExpandedKey === group.key ? "rotate-90" : ""}`}
+                />
               </button>
-            {/each}
-          {/if}
+              {#if mobileExpandedKey === group.key}
+                <div class="border-t border-ink/8 pb-5 pl-4 pt-3">
+                  <InstitutionDetails
+                    {hiddenIds}
+                    {group}
+                    bills={$bills.data ?? []}
+                    billsPending={$bills.isPending}
+                    billsError={$bills.isError}
+                    compact
+                  />
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
 
-          <button
-            class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "investments" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
-            type="button"
-            aria-pressed={activeKey === "investments"}
-            onclick={() => (selectedKey = "investments")}
-          >
-            <span class="min-w-0">
-              <strong class="block text-sm">投資</strong>
-              <small class="mt-1 block text-caption text-subtle">
-                {$investments.data?.length ?? 0} 個持倉 · 持倉與交易紀錄
-              </small>
-            </span>
-            <strong class="text-sm tabular-nums text-steel">
+        <div class="border-t border-ink/10 pt-5">
+          <div class="flex items-start justify-between gap-3 pb-1">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">投資</h2>
+              <p class="mt-1 text-caption text-subtle">
+                {$investments.data?.length ?? 0} 個持倉 · 交易紀錄
+              </p>
+            </div>
+            <strong
+              class="text-lg font-medium tracking-tight tabular-nums text-steel"
+            >
               {formatCurrency(summary.investmentTotal)}
             </strong>
-          </button>
-
-          {#if ($manual.data?.length ?? 0) > 0}
-            <button
-              class={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-ink/8 px-3 py-2 text-left transition hover:bg-ink/3 ${activeKey === "manual-assets" ? "bg-ink/4 shadow-[inset_3px_0_0_var(--color-steel)]" : ""}`}
-              type="button"
-              aria-pressed={activeKey === "manual-assets"}
-              onclick={() => (selectedKey = "manual-assets")}
-            >
-              <span class="min-w-0">
-                <strong class="block text-sm">其他資產</strong>
-                <small class="mt-1 block text-caption text-subtle">
-                  {$manual.data?.length ?? 0} 筆 · 手動維護估值
-                </small>
-              </span>
-              <strong class="text-sm tabular-nums text-moss">
-                {formatCurrency(summary.manualTotal)}
-              </strong>
-            </button>
-          {/if}
-        </div>
-      </div>
-
-      <div class="min-h-0 overflow-y-auto">
-        {#if activeItem?.kind === "institution"}
-          <InstitutionDetails
-            group={activeItem.group}
-            bills={$bills.data ?? []}
-            billsPending={$bills.isPending}
-            billsError={$bills.isError}
-          />
-        {:else if activeItem?.kind === "investments"}
+          </div>
           <InvestmentWorkspace
+            {hiddenIds}
             positions={$investments.data ?? []}
             trades={$trades.data ?? []}
             total={summary.investmentTotal}
             tradesPending={$trades.isPending}
             tradesError={$trades.isError}
+            compact
           >
             <ManualInvestments {api} />
           </InvestmentWorkspace>
-        {:else if activeItem?.kind === "manual-assets"}
-          <ManualAssets {api} variant="embedded" />
-        {/if}
-      </div>
-    </section>
-
-    <section
-      class="grid border-t border-ink/10 pt-5 xl:hidden"
-      aria-label="資產清冊"
-    >
-      {#if summary.institutionGroups.length > 0}
-        <div class="flex items-start justify-between gap-3 pb-1">
-          <div class="min-w-0">
-            <h2 class="text-base font-semibold">金融機構</h2>
-            <p class="mt-1 text-caption text-subtle">
-              {summary.institutionGroups.length} 個機構
-            </p>
-          </div>
-          <strong
-            class="text-lg font-medium tracking-tight tabular-nums text-steel"
-          >
-            {formatCurrency(summary.bankTotal)}
-          </strong>
         </div>
-        {#each summary.institutionGroups as group (group.key)}
-          <div
-            class={mobileExpandedKey === group.key
-              ? "border-b border-ink/15 last:border-b-0"
-              : "border-b border-ink/8 last:border-b-0"}
-          >
-            <button
-              class="grid min-h-[72px] w-full grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-3 py-2 text-left"
-              type="button"
-              aria-expanded={mobileExpandedKey === group.key}
-              onclick={() => toggleMobile(group.key)}
-            >
-              <span class="min-w-0">
-                <strong class="block truncate text-sm">
-                  {group.institution}
-                </strong>
-                <small class="mt-1 block truncate text-caption text-subtle">
-                  {group.accounts.length} 帳戶 · {group.cards.length} 卡片{group
-                    .foreignCurrencies.length
-                    ? ` · 含 ${group.foreignCurrencies.join("、")}`
-                    : ""}
-                </small>
-              </span>
-              <span class="text-right">
-                <strong class="block text-sm tabular-nums text-steel">
-                  {group.accounts.length
-                    ? formatCurrency(group.assetTotalTwd)
-                    : "—"}
-                </strong>
-                <small
-                  class={`mt-1 block text-caption tabular-nums ${group.cards.length ? "text-coral" : "text-subtle"}`}
-                >
-                  {group.cards.length
-                    ? group.hasUnknownCardBalance
-                      ? "負債資料不完整"
-                      : `${group.debtTotalTwd < 0 ? "溢繳" : "負債"} ${formatCurrency(-group.debtTotalTwd)}`
-                    : "無信用卡"}
-                </small>
-              </span>
-              <ChevronRight
-                class={`size-4 text-subtle transition ${mobileExpandedKey === group.key ? "rotate-90" : ""}`}
-              />
-            </button>
-            {#if mobileExpandedKey === group.key}
-              <div class="border-t border-ink/8 pb-5 pl-4 pt-3">
-                <InstitutionDetails
-                  {group}
-                  bills={$bills.data ?? []}
-                  billsPending={$bills.isPending}
-                  billsError={$bills.isError}
-                  compact
-                />
-              </div>
-            {/if}
-          </div>
-        {/each}
-      {/if}
 
-      <div class="border-t border-ink/10 pt-5">
-        <div class="flex items-start justify-between gap-3 pb-1">
-          <div class="min-w-0">
-            <h2 class="text-base font-semibold">投資</h2>
-            <p class="mt-1 text-caption text-subtle">
-              {$investments.data?.length ?? 0} 個持倉 · 交易紀錄
-            </p>
+        <div class="border-t border-ink/10 pt-5">
+          <div class="flex items-start justify-between gap-3 pb-1">
+            <div class="min-w-0">
+              <h2 class="text-base font-semibold">其他資產</h2>
+              <p class="mt-1 text-caption text-subtle">
+                {$manual.data?.length ?? 0} 筆 · 估值歷史
+              </p>
+            </div>
+            <div class="shrink-0 text-right">
+              <strong
+                class="text-lg font-medium tracking-tight tabular-nums text-moss"
+              >
+                {formatCurrency(summary.manualTotal)}
+              </strong>
+              <button
+                type="button"
+                class="mt-1 block w-full text-sm font-medium text-steel hover:text-steel/80"
+                onclick={() => otherAssets?.openAdd()}
+              >
+                新增資產
+              </button>
+            </div>
           </div>
-          <strong
-            class="text-lg font-medium tracking-tight tabular-nums text-steel"
-          >
-            {formatCurrency(summary.investmentTotal)}
-          </strong>
+          <ManualAssets
+            bind:this={otherAssets}
+            {api}
+            variant="embedded"
+            hideSummary={true}
+          />
         </div>
-        <InvestmentWorkspace
-          positions={$investments.data ?? []}
-          trades={$trades.data ?? []}
-          total={summary.investmentTotal}
-          tradesPending={$trades.isPending}
-          tradesError={$trades.isError}
-          compact
-        >
-          <ManualInvestments {api} />
-        </InvestmentWorkspace>
-      </div>
-
-      <div class="border-t border-ink/10 pt-5">
-        <div class="flex items-start justify-between gap-3 pb-1">
-          <div class="min-w-0">
-            <h2 class="text-base font-semibold">其他資產</h2>
-            <p class="mt-1 text-caption text-subtle">
-              {$manual.data?.length ?? 0} 筆 · 估值歷史
-            </p>
-          </div>
-          <div class="shrink-0 text-right">
-            <strong
-              class="text-lg font-medium tracking-tight tabular-nums text-moss"
-            >
-              {formatCurrency(summary.manualTotal)}
-            </strong>
-            <button
-              type="button"
-              class="mt-1 block w-full text-sm font-medium text-steel hover:text-steel/80"
-              onclick={() => otherAssets?.openAdd()}
-            >
-              新增資產
-            </button>
-          </div>
-        </div>
-        <ManualAssets
-          bind:this={otherAssets}
-          {api}
-          variant="embedded"
-          hideSummary={true}
-        />
-      </div>
-    </section>
+      </section>
+    {/if}
   </div>
 {/if}

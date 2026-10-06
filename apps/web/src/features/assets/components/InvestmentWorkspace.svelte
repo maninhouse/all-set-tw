@@ -4,8 +4,6 @@
     InvestmentRow,
     InvestmentTransactionRow,
   } from "@/data/investments/types";
-  import Checkbox from "@/shared/ui/Checkbox.svelte";
-  import { isSmallCryptoPosition } from "../model/small-positions";
   import {
     formatCurrency,
     formatDate,
@@ -19,6 +17,7 @@
     tradesPending = false,
     tradesError = false,
     compact = false,
+    hiddenIds = new Set(),
     children,
   }: {
     positions: InvestmentRow[];
@@ -27,35 +26,17 @@
     tradesPending?: boolean;
     tradesError?: boolean;
     compact?: boolean;
+    /** Small holdings hidden by the page-level checkbox. */
+    hiddenIds?: ReadonlySet<string>;
     /** Rendered under the holdings list, e.g. manual holding management. */
     children?: Snippet;
   } = $props();
 
   let tab = $state<"holdings" | "transactions">("holdings");
 
-  const HIDE_SMALL_KEY = "taiwan-fin-hub-hide-small-crypto";
-  let hideSmall = $state(readHideSmall());
-  const smallCount = $derived(positions.filter(isSmallCryptoPosition).length);
   const visiblePositions = $derived(
-    hideSmall ? positions.filter((p) => !isSmallCryptoPosition(p)) : positions,
+    positions.filter((position) => !hiddenIds.has(position.id)),
   );
-
-  function readHideSmall() {
-    try {
-      return localStorage.getItem(HIDE_SMALL_KEY) !== "0";
-    } catch {
-      return true;
-    }
-  }
-
-  function setHideSmall(value: boolean) {
-    hideSmall = value;
-    try {
-      localStorage.setItem(HIDE_SMALL_KEY, value ? "1" : "0");
-    } catch {
-      // Preference is a convenience only.
-    }
-  }
 
   function tradeDisplay(trade: InvestmentTransactionRow) {
     if (trade.amount != null && trade.price != null && trade.price !== 1)
@@ -111,22 +92,9 @@
 
   <div class={compact ? "" : "min-h-0 flex-1 overflow-y-auto px-5 pb-4"}>
     {#if tab === "holdings"}
-      {#if smallCount > 0}
-        <label
-          class="flex items-center gap-2 py-3 text-caption text-subtle"
-          data-testid="hide-small-crypto"
-        >
-          <Checkbox
-            checked={hideSmall}
-            onchange={(event: Event) =>
-              setHideSmall((event.currentTarget as HTMLInputElement).checked)}
-          />
-          隱藏小於 1 USD 的加密資產（{smallCount} 筆）
-        </label>
-      {/if}
       {#if visiblePositions.length === 0}
         <p class="py-8 text-center text-sm text-subtle">
-          {positions.length === 0 ? "尚無投資持倉。" : "沒有符合條件的持倉。"}
+          {positions.length === 0 ? "尚無投資持倉。" : "小額持倉已全部隱藏。"}
         </p>
       {:else}
         <div class="divide-y divide-border">

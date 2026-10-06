@@ -23,6 +23,7 @@
     manualAssetsQuery,
   } from "@/data/assets/queries";
   import type { ManualAssetRow } from "@/data/assets/types";
+  import { MANUAL_ASSET_CATEGORY_LABELS } from "./model/summary";
   import {
     formatCurrency,
     formatDate,
@@ -66,12 +67,7 @@
     date: todayStr(),
     note: "",
   });
-  const categories = {
-    real_estate: "不動產",
-    insurance: "保險",
-    vehicle: "交通工具",
-    other: "其他",
-  };
+  const categories = MANUAL_ASSET_CATEGORY_LABELS;
   const currencies = ["TWD", "USD", "JPY", "EUR"] as const;
   const rateValues = $derived(
     Object.fromEntries(

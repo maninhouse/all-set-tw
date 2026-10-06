@@ -31,6 +31,13 @@ apps/web/src/
 
 `data/investments` 的 `investmentsQuery` 會合併 `/api/investments` 與 `/api/manual-investments`；手動持倉經 `toInvestmentRows` 排除已被 connector 取代（`supersededBy`）的列，並標記 `source: "manual"`。手動持倉載入失敗時只略過手動部分、照常回傳同步持倉，錯誤由投資頁的手動持倉區塊（`manualInvestmentsQuery`）顯示。資產總覽、總覽與投資頁都使用同一份合併結果，不要在 feature 內另外加總手動持倉。`manualInvestments` query key 位於 `investments` 之下，invalidate `investments` 即會一併更新。
 
+## 資產清冊分類
+
+資產清冊提供「依類別」（預設）與「依機構」兩種檢視，偏好存於 localStorage；完全沒有資料時固定使用依機構，以保留新增持倉入口。信用卡帳單、投資交易紀錄、手動持倉與其他資產的管理只在依機構檢視。
+類別由 `features/assets/model/summary.ts` 的 `calculateAssetSummary` 一併產生 `categoryGroups`，與總額共用同一個台幣換算：活存（checking、savings、settlement_cash、stored_value、unknown 或未提供）、定存（time_deposit）、其他帳戶（其餘非信用卡帳戶）、台股（TWD 計價的 stock／etf）、海外股（非 TWD 的 stock／etf）、基金、CRYPTO、其他投資（未知 assetType）、其他資產（手動資產）與信用卡負債。
+每筆資料必須恰好落在一個類別，資產類別小計總和等於 `grossAssets`，信用卡小計等於負的 `cardDebt`；新增帳戶或資產型別時須同步調整分類並維持此對帳。類別預設收合，展開狀態存於 localStorage。
+「隱藏小額項目」勾選框位於檢視切換旁，兩種檢視共用 `summary.smallItemIds`：銀行帳戶、信用卡與持倉依計價幣別判斷，USD 計價低於 1 USD、TWD 計價低於 NT$10（皆含 0）時隱藏，其他幣別折合台幣低於 NT$10；餘額未同步、尚無報價或缺匯率的項目不隱藏，手動其他資產不隱藏。隱藏只影響清單顯示，小計與總額仍包含這些項目。
+
 ## Svelte 檔案
 
 - 頁面入口命名為 `*Page.svelte`，feature 專用子元件放在相鄰的 `components/`。
