@@ -15,6 +15,8 @@
     Link2,
     Unlink2,
     ArrowLeft,
+    ArrowUp,
+    ArrowUpDown,
     ChevronRight,
     X,
   } from "@lucide/svelte";
@@ -83,6 +85,12 @@
   } from "@/data/activity/matching";
   import { getActivityDataStatus } from "./model/load-status";
   import {
+    ACTIVITY_SORT_OPTIONS,
+    activityCategoryChoices,
+    sortActivities,
+    type ActivitySort,
+  } from "./model/sort";
+  import {
     formatCompactTwd,
     formatCurrency,
     formatDate,
@@ -112,6 +120,9 @@
   const qc = useQueryClient();
   let flow = $state<ActivityFlowFilter>("all");
   let source = $state<ActivitySourceFilter>("all");
+  /** Month-view category chooser; the search view uses `searchCategory`. */
+  let monthCategoryId = $state("");
+  let sort = $state<ActivitySort>("time-desc");
   let search = $state("");
   let monthlySearch = $state("");
   let submittedSearch = $state("");
@@ -193,6 +204,7 @@
     flow: ActivityFlowFilter;
     source: ActivitySourceFilter;
     category: ActivityCategoryFilter | null;
+    categoryId: string;
     scroll: number;
     rootScroll: number;
   } | null = null;
@@ -201,12 +213,14 @@
       flow,
       source,
       category: selectedCategory,
+      categoryId: monthCategoryId,
       scroll: window.scrollY,
       rootScroll: document.getElementById("root")?.scrollTop ?? 0,
     };
     flow = "all";
     source = "all";
     selectedCategory = null;
+    monthCategoryId = "";
     searchTime = "all";
     searchFrom = "";
     searchTo = "";
@@ -222,6 +236,7 @@
       flow = saved.flow;
       source = saved.source;
       selectedCategory = saved.category;
+      monthCategoryId = saved.categoryId;
       void tick().then(() => {
         window.scrollTo({ top: saved.scroll, behavior: "instant" });
         document
@@ -497,7 +512,7 @@
       month: searching ? "" : selectedMonth,
       from: searching ? searchDates.from : undefined,
       to: searching ? searchDates.to : undefined,
-      categoryId: searching ? searchCategory : undefined,
+      categoryId: searching ? searchCategory : monthCategoryId || undefined,
       flow,
       source,
       search: searching ? submittedSearch : monthlySearch,
@@ -529,7 +544,56 @@
     observer.observe(searchSentinel);
     return () => observer.disconnect();
   });
-  const filteredGroups = $derived(groupActivitiesByDate(filtered));
+  const sortedActivities = $derived(sortActivities(filtered, sort, rateValues));
+  const filteredGroups = $derived(sortedActivities.groups);
+  const monthCategoryChoices = $derived.by(() => {
+    const choices = activityCategoryChoices(
+      filterActivities(rawItems, {
+        month: selectedMonth,
+        flow,
+        source,
+        search: monthlySearch,
+        category: null,
+      }),
+    );
+    // Keep the current choice listed when the month or flow has none of it.
+    if (
+      monthCategoryId &&
+      !choices.some((choice) => choice.id === monthCategoryId)
+    )
+      choices.push({
+        id: monthCategoryId,
+        label:
+          categoryOptions.find((option) => option.id === monthCategoryId)
+            ?.label ?? monthCategoryId,
+        count: 0,
+      });
+    return choices;
+  });
+  const monthCategoryLabel = $derived(
+    monthCategoryChoices.find((choice) => choice.id === monthCategoryId)?.label,
+  );
+  function toggleSort(kind: "time" | "amount") {
+    sort =
+      kind === "time"
+        ? sort === "time-desc"
+          ? "time-asc"
+          : "time-desc"
+        : sort === "amount-desc"
+          ? "amount-asc"
+          : "amount-desc";
+  }
+  /** Date headers carry the day in time sorts; amount sorts show it per row. */
+  function rowTime(item: ActivityItem) {
+    if (sortedActivities.grouped) return formatActivityTime(item);
+    const date = formatActivityDate(item);
+    const year = activityDateKey(item).slice(0, 4);
+    return searching && year ? `${year} 年 ${date}` : date;
+  }
+  function sortDirection(kind: "time" | "amount") {
+    if (!sort.startsWith(kind)) return "none";
+    return sort.endsWith("desc") ? "descending" : "ascending";
+  }
   const mappingCandidates = $derived.by(() => {
     if (!mappingDialog) return [];
     const unavailableTransactionIds = new Set(
@@ -683,6 +747,7 @@
       return;
     }
     selectedCategory = { flow, category };
+    monthCategoryId = "";
     chooseFlow(flow, false);
   }
   function clearCategoryFilter() {
@@ -849,6 +914,23 @@
     ).length;
   }
 </script>
+
+{#snippet sortHeader(kind: "time" | "amount", label: string)}
+  {@const direction = sortDirection(kind)}
+  <button
+    type="button"
+    class={`inline-flex min-h-9 items-center gap-1 rounded-md font-semibold transition hover:text-ink ${direction === "none" ? "" : "text-ink"}`}
+    aria-label={`依${kind === "time" ? "時間" : "金額"}排序`}
+    onclick={() => toggleSort(kind)}
+  >
+    {label}
+    {#if direction === "descending"}<ArrowDown
+        class="size-3.5"
+      />{:else if direction === "ascending"}<ArrowUp
+        class="size-3.5"
+      />{:else}<ArrowUpDown class="size-3.5 opacity-50" />{/if}
+  </button>
+{/snippet}
 
 {#if !searching && ($bank.isPending || $invoices.isPending || $invoiceMappings.isPending || $trades.isPending)}
   <EmptyState title="載入活動中" body="正在整理銀行、投資與發票資料。" />
@@ -1100,11 +1182,19 @@
                 ? `已載入 ${filtered.length} 筆`
                 : selectedCategory
                   ? `${selectedMonthLabel} · ${selectedCategory.flow === "income" ? "收入" : "支出"} · ${selectedCategory.category}`
-                  : flow === "income"
-                    ? `${selectedMonthLabel} · 收入`
-                    : flow === "expense"
-                      ? `${selectedMonthLabel} · 支出`
-                      : "所有活動"}
+                  : flow !== "all" || monthCategoryLabel
+                    ? [
+                        selectedMonthLabel,
+                        flow === "income"
+                          ? "收入"
+                          : flow === "expense"
+                            ? "支出"
+                            : "",
+                        monthCategoryLabel ?? "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : "所有活動"}
             </h2>
             <p class="text-caption text-subtle">
               {searching
@@ -1147,7 +1237,46 @@
                 >{/each}</TabsList
             >
           </div>
+          <div
+            class="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          >
+            <div class="grid min-w-0 gap-1.5">
+              <span class="text-caption font-semibold text-subtle">收支</span>
+              <TabsList
+                aria-label="收入或支出"
+                class="grid h-auto w-full grid-cols-3"
+                >{#each [{ key: "all", label: "全部" }, { key: "income", label: "收入" }, { key: "expense", label: "支出" }] as option (option.key)}<TabsTrigger
+                    class="min-h-9 min-w-0 px-1 text-caption md:text-sm"
+                    active={flow === option.key}
+                    onclick={() => chooseFlow(option.key as ActivityFlowFilter)}
+                    >{option.label}</TabsTrigger
+                  >{/each}</TabsList
+              >
+            </div>
+            <label class="grid min-w-0 gap-1.5">
+              <span class="text-caption font-semibold text-subtle">分類</span>
+              <Select
+                aria-label="分類篩選"
+                class="h-11"
+                bind:value={monthCategoryId}
+                onchange={() => (selectedCategory = null)}
+              >
+                <option value="">全部分類</option>
+                {#each monthCategoryChoices as choice (choice.id)}<option
+                    value={choice.id}>{choice.label}（{choice.count}）</option
+                  >{/each}
+              </Select>
+            </label>
+          </div>
         {/if}
+        <label class="grid min-w-0 gap-1.5 md:hidden">
+          <span class="text-caption font-semibold text-subtle">排序</span>
+          <Select aria-label="排序方式" class="h-11" bind:value={sort}>
+            {#each ACTIVITY_SORT_OPTIONS as option (option.value)}<option
+                value={option.value}>{option.label}</option
+              >{/each}
+          </Select>
+        </label>
         {#if $calculationMutation.isError}<p
             class="text-sm font-medium text-coral"
           >
@@ -1167,19 +1296,18 @@
                     ? "部分資料目前無法顯示，請重試後再查看。"
                     : "沒有符合條件的活動。"}
             </p>{:else}
-            {#each filteredGroups as group (group.dateKey)}<div
-                class="flex items-center justify-between border-t border-ink/8 py-2.5 text-caption"
-              >
-                <span class="font-medium text-subtle"
-                  >{searching
-                    ? `${group.dateKey.slice(0, 4)} 年 `
-                    : ""}{formatActivityDateGroup(group.dateKey)}</span
-                ><span class="text-subtle">{group.items.length} 筆</span>
-              </div>
-              <div class="divide-y divide-ink/8">
+            {#each filteredGroups as group (group.dateKey)}{#if sortedActivities.grouped}<div
+                  class="flex items-center justify-between border-t border-ink/8 py-2.5 text-caption"
+                >
+                  <span class="font-medium text-subtle"
+                    >{searching
+                      ? `${group.dateKey.slice(0, 4)} 年 `
+                      : ""}{formatActivityDateGroup(group.dateKey)}</span
+                  ><span class="text-subtle">{group.items.length} 筆</span>
+                </div>{/if}
+              <div class="divide-y divide-ink/8 border-t border-ink/8">
                 {#each group.items as item (item.source + "-" + item.id)}{@const amount =
-                    activityDisplayAmount(item)}{@const time =
-                    formatActivityTime(item)}
+                    activityDisplayAmount(item)}{@const time = rowTime(item)}
                   <button
                     aria-label={`查看 ${item.title} 活動詳情`}
                     class={`flex w-full min-w-0 items-center gap-3 py-3.5 text-left transition hover:bg-ink/3 ${item.excludedFromCalculation ? "bg-ink/[0.025]" : ""}`}
@@ -1262,23 +1390,27 @@
               <thead
                 class="border-b border-ink/8 text-caption font-semibold text-subtle"
                 ><tr
-                  ><th class="py-2.5 pr-4">商家／說明</th><th
-                    class="px-4 py-2.5">銀行／帳戶</th
-                  ><th class="px-4 py-2.5">分類</th><th
-                    class="py-2.5 pl-4 text-right">金額</th
+                  ><th class="py-1 pr-4" aria-sort={sortDirection("time")}
+                    >{@render sortHeader("time", "商家／時間")}</th
+                  ><th class="px-4 py-2.5">銀行／帳戶</th><th
+                    class="px-4 py-2.5">分類</th
+                  ><th
+                    class="py-1 pl-4 text-right"
+                    aria-sort={sortDirection("amount")}
+                    >{@render sortHeader("amount", "金額")}</th
                   ></tr
                 ></thead
               >
             </table>
-            {#each filteredGroups as group (group.dateKey)}<div
-                class="flex min-w-[760px] items-center justify-between border-t border-ink/8 py-2.5 text-caption"
-              >
-                <span class="font-medium text-subtle"
-                  >{searching
-                    ? `${group.dateKey.slice(0, 4)} 年 `
-                    : ""}{formatActivityDateGroup(group.dateKey)}</span
-                ><span class="text-subtle">{group.items.length} 筆</span>
-              </div>
+            {#each filteredGroups as group (group.dateKey)}{#if sortedActivities.grouped}<div
+                  class="flex min-w-[760px] items-center justify-between border-t border-ink/8 py-2.5 text-caption"
+                >
+                  <span class="font-medium text-subtle"
+                    >{searching
+                      ? `${group.dateKey.slice(0, 4)} 年 `
+                      : ""}{formatActivityDateGroup(group.dateKey)}</span
+                  ><span class="text-subtle">{group.items.length} 筆</span>
+                </div>{/if}
               <table class="w-full min-w-[760px] table-fixed text-left text-sm">
                 <colgroup
                   ><col /><col class="w-56" /><col class="w-36" /><col
@@ -1288,7 +1420,7 @@
                 <tbody class="divide-y divide-ink/8"
                   >{#each group.items as item (item.source + "-" + item.id)}{@const amount =
                       activityDisplayAmount(item)}{@const time =
-                      formatActivityTime(item)}<tr
+                      rowTime(item)}<tr
                       aria-label={`查看 ${item.title} 活動詳情`}
                       class={`cursor-pointer transition hover:bg-ink/3 focus-visible:outline-2 focus-visible:outline-steel ${item.excludedFromCalculation ? "bg-ink/[0.025]" : ""}`}
                       onclick={() => openDetail(item)}
