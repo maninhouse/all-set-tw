@@ -287,6 +287,7 @@ function registerSyncRoutes(api: Hono<AppBindings>) {
     "binance",
     "bitfinex",
     "linebank",
+    "flowwallet",
   ] as const;
   for (const connectorId of credentialOnlyConnectorIds) {
     api.post(`/connectors/${connectorId}/sync`, async (c) => {

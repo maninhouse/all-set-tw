@@ -18,6 +18,7 @@ import { megabankConfigSchema } from "./megabank/protocol";
 import { binanceConfigSchema } from "./binance/api";
 import { bitfinexConfigSchema } from "./bitfinex/api";
 import { linebankConfigSchema } from "./linebank/protocol";
+import { flowwalletConfigSchema } from "./flowwallet/api";
 
 export const connectorConfigSchemas = {
   einvoice: invoiceConfigSchema,
@@ -38,6 +39,7 @@ export const connectorConfigSchemas = {
   binance: binanceConfigSchema,
   bitfinex: bitfinexConfigSchema,
   linebank: linebankConfigSchema,
+  flowwallet: flowwalletConfigSchema,
 } satisfies Record<ConnectorId, z.ZodTypeAny>;
 
 export function parseConnectorConfig(

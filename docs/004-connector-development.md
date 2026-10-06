@@ -461,6 +461,17 @@ Migration `0043_merge_legacy_invoice_duplicates.sql` 以相同發票號碼整併
 - Worker 出口 IP 不固定，請勿在交易所啟用 IP 白名單；金鑰只開啟讀取權限，不開啟交易與提現。
 - 當日持倉全數賣出時不會寫入新的零持倉列，最新快照仍停在上一個有持倉的日期。
 
+### Flow Wallet
+
+- 非託管錢包沒有 API 金鑰，只以使用者填入的 Flow（Cadence）帳戶地址唯讀查詢主網，不需要也不得要求私鑰或助記詞。連接模式沿用 `api_credentials`，沒有 session、cursor 或 challenge；Worker 端與交易所共用 `syncCryptoSource`。
+- 地址是唯一的設定欄位，歸類為 credential 而存於 `encrypted_config`（公開偏好欄位目前一律為空）；格式為 `0x` 加 16 位十六進位，儲存時統一為小寫。EVM 地址（40 位）會被 schema 拒絕。地址不寫入 `sourceId`、`raw` 或 log。
+- 資料來自 Flow Access API（`rest-mainnet.onflow.org`）：先以 `/v1/accounts/<address>` 確認帳戶存在（script 對不存在的地址只會回傳空結果），回 400／404 時轉為 `NeedsUserActionError`；再以 `/v1/scripts` 執行 `apps/worker/src/sources/flowwallet/api.ts` 內的 Cadence script。
+- 持倉 script 走訪帳戶 storage 內所有 `FungibleToken.Vault`，只讀 `balance` 欄位並依型別加總；另由 `FlowStakingCollection` 加總節點與委派的 `tokensCommitted`、`tokensStaked`、`tokensUnstaking`、`tokensRewarded`、`tokensUnstaked`（`tokensRequestedToUnstake` 已含在 staked 內，不重複計算）。已失效而由系統復原的合約型別（`isRecovered`，例如舊版 `FiatToken`）不納入。
+- 代幣代號來自各合約的 `FTDisplay`，合約可能 panic 使整支 script 失敗，因此另以獨立 script 查詢；失敗時改用合約名稱，不影響持倉數量。代號最多保留 24 字元。
+- 寫入 `investment_positions`（`asset_type = 'crypto'`、`currency = 'USD'`）：`flowwallet:wallet:FLOW`、`flowwallet:staking:FLOW`，其他代幣為 `flowwallet:token:<Vault 型別識別>`；餘額為零的 Vault 不寫入。
+- FLOW 報價依序取 Coinbase、CoinGecko 公開現價；兩者都失敗時整次同步失敗，不以缺價寫入。穩定幣（USDC.e、USDF、PYUSD0）以 Vault 型別白名單視為 1 USD，不比對代號（代號由合約自行宣告）；其餘代幣（含 stFlow）沒有報價來源，市值留空。
+- 尚未涵蓋：Flow EVM 側（COA／EOA）的 FLOW 與 ERC-20、未經 staking collection 管理的鎖倉代幣（`LockedTokens`）、NFT。質押加總已通過主網型別檢查，但尚未以實際有質押的帳戶核對金額。
+
 ## 將來銀行
 
 使用網銀帳密，直接呼叫網銀內部 Web API 登入與查詢；圖形驗證碼支援 AI 自動辨識或人工輸入。單次登入、查詢後登出，不接管其他工作階段。主帳戶查詢最近三個月，活存口袋讀取所有分頁後依日期篩選；定存口袋同步餘額，基金與美股未接入。排程預設停用。設定 CAS 與原子寫入 guard 防止查詢期間變更帳密後仍寫入舊結果。

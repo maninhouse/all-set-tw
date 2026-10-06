@@ -426,6 +426,18 @@ export const connectorCatalog = {
     secretStateFields: [],
     resetOnCredentialChangeFields: [],
   },
+  flowwallet: {
+    id: "flowwallet",
+    title: "Flow Wallet",
+    description: "Flow 鏈上的 FLOW、質押與其他代幣持倉（公開地址唯讀）",
+    connectionMode: "api_credentials",
+    scopes: ["all"],
+    capabilities: ["investment_position"],
+    publicFields: [],
+    credentialFields: ["address"],
+    secretStateFields: [],
+    resetOnCredentialChangeFields: [],
+  },
 } as const satisfies Record<string, ConnectorCatalogEntry>;
 
 export type ConnectorId = keyof typeof connectorCatalog;

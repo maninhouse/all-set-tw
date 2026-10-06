@@ -55,6 +55,7 @@ import {
 import { syncBinance } from "../../sources/binance/sync";
 import { syncBitfinex } from "../../sources/bitfinex/sync";
 import { syncLinebank } from "../../sources/linebank/sync";
+import { syncFlowwallet } from "../../sources/flowwallet/sync";
 import { SYNC_SCOPE_ALL, type SyncOutcome, type SyncScope } from "./types";
 
 type ConnectorRuntimeDefinition = {
@@ -151,6 +152,9 @@ export const connectorRuntimeRegistry: Record<
   },
   linebank: {
     run: (env, trigger) => syncLinebank(env, trigger),
+  },
+  flowwallet: {
+    run: (env, trigger) => syncFlowwallet(env, trigger),
   },
 };
 

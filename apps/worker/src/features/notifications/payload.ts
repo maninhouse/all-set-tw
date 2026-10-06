@@ -35,6 +35,7 @@ const connectorLabels: Record<ConnectorId, string> = {
   binance: "Binance",
   bitfinex: "Bitfinex",
   linebank: "LINE Bank",
+  flowwallet: "Flow Wallet",
 };
 
 export function syncNotificationPayload(

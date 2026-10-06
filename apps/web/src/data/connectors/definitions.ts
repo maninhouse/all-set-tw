@@ -107,4 +107,11 @@ export const connectorFields = {
     { key: "account", label: "使用者代號", type: "text" },
     { key: "password", label: "網路銀行密碼", type: "password" },
   ],
+  flowwallet: [
+    {
+      key: "address",
+      label: "Flow 錢包地址（0x 開頭共 18 碼，非 EVM 地址）",
+      type: "text",
+    },
+  ],
 } satisfies ConnectorFieldMap;
