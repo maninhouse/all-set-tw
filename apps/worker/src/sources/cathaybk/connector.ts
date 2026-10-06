@@ -1485,21 +1485,36 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
   const asOfAt = new Date().toISOString();
 
   // ── C0101: card overview (DOM) ─────────────────────────────────────────
-  await page.goto(CREDIT_CARD_OVERVIEW_URL, {
-    waitUntil: "networkidle2",
-    timeout: 60000,
-  });
-  console.log("[cathaybk] credit card overview opened");
   // The overview renders after load; a fixed delay sometimes read the page
-  // before the card block appeared and reported no card. Customers without a
-  // card wait for the timeout.
-  await page
-    .waitForFunction(() => /卡片末四碼/.test(document.body?.innerText ?? ""), {
-      timeout: 15000,
-    })
-    .catch(() => null);
+  // before the card block appeared and reported no card. The page also fails to
+  // render the card block now and then, so reload once before concluding there
+  // is no card. Customers without a card wait for both timeouts.
+  let overviewText = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await page.goto(CREDIT_CARD_OVERVIEW_URL, {
+      waitUntil: "networkidle2",
+      timeout: 60000,
+    });
+    console.log("[cathaybk] credit card overview opened");
+    await page
+      .waitForFunction(
+        () => /卡片末四碼/.test(document.body?.innerText ?? ""),
+        { timeout: 15000 },
+      )
+      .catch(() => null);
+    overviewText = await page.evaluate(() => document.body.innerText);
+    if (parseCathayCardOverview(overviewText).cardDetected) break;
+    console.log(
+      JSON.stringify({
+        event: "cathaybk_card_overview_empty",
+        attempt,
+        textLength: overviewText.length,
+        hasOverviewTitle: overviewText.includes("信用卡帳戶總覽"),
+        hasOpenCardPrompt: overviewText.includes("辦卡"),
+      }),
+    );
+  }
 
-  const overviewText = await page.evaluate(() => document.body.innerText);
   const cardOverview = parseCathayCardOverview(overviewText);
 
   console.log(
