@@ -1477,6 +1477,65 @@ export function parseCathayCardOverview(text: string) {
   };
 }
 
+interface CathayUnbilledSummary {
+  nextBillDate: string | null;
+  amount: number | null;
+  count: number | null;
+  foreignAmount: number | null;
+  trades: TradeItem[];
+}
+
+/**
+ * Parses `C_BILL_Q_CardUnbilledConsume`. Unbilled rows are already charged by
+ * the bank, only not yet on a statement, so they become the same trade shape
+ * as statement rows and share their sourceId (date, amount, merchant).
+ * Returns null when the response is unusable so the sync keeps going without them.
+ */
+export function parseCathayUnbilledConsume(
+  payload: unknown,
+): CathayUnbilledSummary | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const response = payload as { success?: unknown; content?: unknown };
+  if (response.success !== true) return null;
+  const content = response.content;
+  if (typeof content !== "object" || content === null) return null;
+  const record = content as Record<string, unknown>;
+  // A missing list is a degraded response, not "nothing unbilled": callers
+  // delete stored unbilled rows that are absent from a successful list.
+  const details = record.twdUnbilledConsumeDetail;
+  if (!Array.isArray(details)) return null;
+
+  const numberOrNull = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  const reportedCount = numberOrNull(record.unBilledCount);
+  const reportedAmount = numberOrNull(record.unBilledAmount);
+  if (reportedCount !== null && reportedCount !== details.length) return null;
+  if (details.length === 0 && reportedAmount) return null;
+
+  const trades: TradeItem[] = [];
+  for (const item of details as Array<Record<string, unknown>>) {
+    if (typeof item !== "object" || item === null) return null;
+    const amount = numberOrNull(item.twdAmount);
+    if (amount == null || typeof item.consumeDate !== "string") return null;
+    if (amount === 0) continue;
+    trades.push({
+      consumeDate: item.consumeDate,
+      transDesc: String(item.merchantName ?? "").trim(),
+      amount,
+      currency: "TWD",
+    });
+  }
+
+  return {
+    nextBillDate:
+      typeof record.nextBillDate === "string" ? record.nextBillDate : null,
+    amount: numberOrNull(record.unBilledAmount),
+    count: numberOrNull(record.unBilledCount),
+    foreignAmount: numberOrNull(record.foreignUnBilledAmount),
+    trades,
+  };
+}
+
 export async function scrapeCreditCards(page: Page): Promise<Scraped> {
   const bankAccounts: Scraped["bankAccounts"] = [];
   const bankBalanceSnapshots: Scraped["bankBalanceSnapshots"] = [];
@@ -1667,10 +1726,14 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
       });
     }
 
-    return { allBills: targetBills, monthDetails };
+    // 3. Unbilled consumption (already charged, not yet on a statement)
+    const unbilledResp = await xhrPost("C_BILL_Q_CardUnbilledConsume");
+
+    return { allBills: targetBills, monthDetails, unbilledResp };
   }, BANK_SYNC_MONTHS)) as {
     allBills: HistoryBillItem[];
     monthDetails: MonthDetail[];
+    unbilledResp: unknown;
   } | null;
 
   if (!apiResult) {
@@ -1741,6 +1804,58 @@ export async function scrapeCreditCards(page: Page): Promise<Scraped> {
         });
       }
     }
+  }
+
+  const unbilled = parseCathayUnbilledConsume(apiResult.unbilledResp);
+  if (!unbilled) {
+    console.log(
+      "[cathaybk] unbilled consumption unavailable or malformed; skipping",
+    );
+  } else {
+    if (unbilled.foreignAmount) {
+      console.log("[cathaybk] foreign unbilled consumption is not imported");
+    }
+    const knownSourceIds = new Set(bankTransactions.map((t) => t.sourceId));
+    // Occurrences restart here: an unbilled row that later lands on a statement
+    // must get the same sourceId it would have had there.
+    const unbilledSeen = new Map<string, number>();
+    for (const trade of unbilled.trades) {
+      const date = normalizeDateStr(trade.consumeDate);
+      const desc = trade.transDesc || "國泰信用卡消費";
+      const key = [date, sourceId, trade.amount, desc].join(":");
+      const occ = (unbilledSeen.get(key) ?? 0) + 1;
+      unbilledSeen.set(key, occ);
+      // A purchase that already reached a statement keeps its statement row.
+      if (knownSourceIds.has(`${key}:${occ}`)) continue;
+      bankTransactions.push({
+        accountId: sourceId,
+        sourceId: `${key}:${occ}`,
+        postedDate: date,
+        authorizedAt: normalizeCathayAuthorizedAt(trade.consumeDate),
+        amount: trade.amount < 0 ? trade.amount : -trade.amount,
+        currency: "TWD",
+        description: desc,
+        raw: {
+          ...trade,
+          unbilled: true,
+          nextBillDate: unbilled.nextBillDate,
+          duplicateOccurrence: occ,
+        },
+      });
+    }
+    const snapshot = bankBalanceSnapshots[0];
+    if (snapshot) {
+      snapshot.raw = {
+        ...cardOverview,
+        unbilledAmount: unbilled.amount,
+        unbilledCount: unbilled.count,
+        foreignUnbilledAmount: unbilled.foreignAmount,
+        nextBillDate: unbilled.nextBillDate,
+      };
+    }
+    console.log(
+      `[cathaybk] unbilled transactions: ${unbilled.trades.length} (next bill ${unbilled.nextBillDate?.slice(0, 10) ?? "unknown"})`,
+    );
   }
 
   console.log(

@@ -37,6 +37,7 @@ import {
   bankTransactionRecord,
   creditCardBillRecord,
 } from "../../features/sync/record-mapper";
+import { staleCathayUnbilledTransactionStatements } from "./repository";
 import {
   rebuildBankDepositHistory,
   dateFromIso,
@@ -197,12 +198,35 @@ export async function syncCathaybk(
     );
   }
 
+  // 只有本次成功取得未出帳清單才清理，取得失敗時保留舊列。成功時 connector 會在
+  // 信用卡餘額快照的 raw 寫入 unbilledAmount，以此作為「已取得」的標記。
+  const unbilledFetched = bankBalanceSnapshots.some(
+    (snapshot) =>
+      typeof snapshot.raw === "object" &&
+      snapshot.raw !== null &&
+      "unbilledAmount" in snapshot.raw,
+  );
+  const afterPromoteStatements = [
+    ...(bankAccounts.length > 0
+      ? [linkCanonicalBankAccountsStatement(env.DB)]
+      : []),
+    ...(unbilledFetched
+      ? staleCathayUnbilledTransactionStatements(
+          env.DB,
+          bankTransactions
+            .filter(
+              (transaction) =>
+                (transaction.raw as { unbilled?: unknown } | undefined)
+                  ?.unbilled === true,
+            )
+            .map((transaction) => transaction.sourceId),
+        )
+      : []),
+  ];
+
   const newRecords = await persistStagedSyncWrite(env.DB, {
     records,
-    afterPromoteStatements:
-      bankAccounts.length > 0
-        ? [linkCanonicalBankAccountsStatement(env.DB)]
-        : [],
+    afterPromoteStatements,
     finalizeStatements,
   });
 
